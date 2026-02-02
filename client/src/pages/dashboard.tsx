@@ -29,14 +29,17 @@ export default function Dashboard() {
     netBalance: number;
   }>({
     queryKey: ["/api/stats"],
+    refetchInterval: 5000, // <--- ACTUALIZACIÓN AUTOMÁTICA (5 seg)
   });
 
   const { data: orders = [] } = useQuery<RepairOrderWithDetails[]>({
     queryKey: ["/api/orders"],
+    refetchInterval: 5000, // <--- ACTUALIZACIÓN AUTOMÁTICA (5 seg)
   });
 
   const { data: payments = [] } = useQuery<Payment[]>({
     queryKey: ["/api/payments"],
+    refetchInterval: 5000, // <--- ACTUALIZACIÓN AUTOMÁTICA (5 seg)
   });
 
   // Latest Activity Logic

@@ -34,11 +34,13 @@ export default function Orders() {
   // Queries
   const { data: orders, isLoading: isLoadingOrders } = useQuery<RepairOrderWithDetails[]>({
     queryKey: ["/api/orders"],
+    refetchInterval: 5000, // <--- ACTUALIZACIÓN AUTOMÁTICA (5 segundos)
   });
 
   // Necesitamos los pagos para calcular el estado financiero
   const { data: payments = [] } = useQuery<Payment[]>({
     queryKey: ["/api/payments"],
+    refetchInterval: 5000, // <--- ACTUALIZACIÓN AUTOMÁTICA (5 segundos)
   });
 
   // --- LOGICA WHATSAPP ---

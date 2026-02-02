@@ -53,10 +53,11 @@ export default function OrderDetail() {
 
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
 
-  // 1. QUERY DE LA ORDEN
+  // 1. QUERY DE LA ORDEN (CON POLLING ACTIVADO)
   const { data: order, isLoading } = useQuery<RepairOrderWithDetails>({
     queryKey: ["/api/orders", orderId],
     enabled: !!orderId,
+    refetchInterval: 5000, // <--- ACTUALIZACIÓN AUTOMÁTICA (5 seg)
   });
 
   // 2. QUERY DE SETTINGS (Para saber qué preguntas mostrar en el checklist)
@@ -482,7 +483,6 @@ export default function OrderDetail() {
                   <p className="text-sm text-muted-foreground pl-6">Sin bloqueo</p>
                 ) : (
                   <div className="pl-6 space-y-2">
-                    {/* PIN o CONTRASEÑA */}
                     {(order.device.lockType === "PIN" || order.device.lockType === "PASSWORD") && (
                       <div>
                         <span className="text-xs text-muted-foreground uppercase tracking-wider font-bold">
@@ -494,7 +494,6 @@ export default function OrderDetail() {
                       </div>
                     )}
 
-                    {/* PATRÓN */}
                     {order.device.lockType === "PATRON" && (
                       <div>
                         <span className="text-xs text-muted-foreground uppercase tracking-wider font-bold block mb-2">

@@ -2,8 +2,6 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabaseClient";
 
 // 🔹 1. DEFINIR LA URL BASE
-// Si existe la variable de entorno (Vercel), la usa.
-// Si no (Localhost), usa string vacío "" para que actúe el proxy de Vite.
 const BASE_URL = import.meta.env.VITE_API_URL || "";
 
 async function throwIfResNotOk(res: Response) {
@@ -34,7 +32,6 @@ export async function apiRequest(
   const headers = await getAuthHeaders();
 
   // 🔹 2. USAR LA URL BASE AQUÍ
-  // Concatenamos la base (ej: https://railway...) con la ruta (ej: /api/products)
   const res = await fetch(`${BASE_URL}${url}`, {
     method,
     headers,
@@ -51,7 +48,6 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
     async ({ queryKey }) => {
-      // Get headers manually since we can't reuse getAuthHeaders easily if we want to preserve queryKey structure logic 
       const { data: { session } } = await supabase.auth.getSession();
       const headers: Record<string, string> = {};
       if (session?.access_token) {
@@ -59,7 +55,6 @@ export const getQueryFn: <T>(options: {
       }
 
       // 🔹 3. USAR LA URL BASE AQUÍ TAMBIÉN
-      // React Query pasa la ruta como array en queryKey
       const path = queryKey.join("/");
       const res = await fetch(`${BASE_URL}${path}`, {
         headers,
@@ -73,13 +68,22 @@ export const getQueryFn: <T>(options: {
       return await res.json();
     };
 
+// 🔹 CONFIGURACIÓN DE CACHÉ ACTUALIZADA
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       queryFn: getQueryFn({ on401: "throw" }),
-      refetchInterval: false,
-      refetchOnWindowFocus: false,
-      staleTime: Infinity,
+
+      // 1. Stale Time (Frescura): 1 Hora
+      // Si vuelves a una pantalla antes de 1 hora, NO carga del servidor (instantáneo).
+      staleTime: 1000 * 60 * 60,
+
+      // 2. GC Time (Memoria): 1 Hora
+      // Mantiene los datos en RAM por 1 hora aunque cambies de pestaña.
+      gcTime: 1000 * 60 * 60,
+
+      // 3. Comportamiento
+      refetchOnWindowFocus: true, // Verifica cambios al volver a la ventana (seguridad)
       retry: false,
     },
     mutations: {

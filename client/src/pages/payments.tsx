@@ -37,6 +37,17 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -52,7 +63,6 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { Check } from "lucide-react";
-// IMPORTANTE: Importamos la función de impresión
 import { printTicket } from "@/lib/printer";
 
 export default function Payments() {
@@ -178,9 +188,6 @@ export default function Payments() {
       setCart([]);
       setSaleNotes("");
       setPaymentMethod("efectivo");
-
-      // Opcional: Imprimir ticket automáticamente al vender
-      // printTicket(newPayment, settings);
     },
     onError: (error: Error) => {
       toast({
@@ -211,6 +218,22 @@ export default function Payments() {
         description: error.message,
         variant: "destructive"
       });
+    },
+  });
+
+  // --- MUTATION: ELIMINAR PAGO ---
+  const deletePaymentMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/payments/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] }); // Actualizar caja
+      // Opcional: Actualizar órdenes y productos si se revierten stocks (depende de tu lógica backend avanzada)
+      toast({ title: "Transacción eliminada", description: "Se ha descontado de la caja." });
+    },
+    onError: () => {
+      toast({ title: "Error al eliminar", variant: "destructive" });
     },
   });
 
@@ -602,7 +625,7 @@ export default function Payments() {
                     )}
                   </div>
 
-                  {/* --- FOOTER DEL CARRITO (ESTILIZADO) --- */}
+                  {/* --- FOOTER DEL CARRITO --- */}
                   <div className="p-4 border-t bg-muted/20 space-y-4">
                     <div className="space-y-2">
                       {surchargeAmount > 0 ? (
@@ -682,7 +705,7 @@ export default function Payments() {
                 <TableHead>Items</TableHead>
                 <TableHead>Método</TableHead>
                 <TableHead className="text-right">Monto</TableHead>
-                <TableHead className="w-[50px]"></TableHead> {/* Columna para el botón de imprimir */}
+                <TableHead className="w-[100px] text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -739,14 +762,45 @@ export default function Payments() {
                       {formatMoney(payment.amount)}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => printTicket(payment, settings)}
-                        title="Imprimir Ticket"
-                      >
-                        <Printer className="h-4 w-4 text-muted-foreground hover:text-foreground" />
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        {/* IMPRIMIR */}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => printTicket(payment, settings)}
+                          title="Imprimir Ticket"
+                        >
+                          <Printer className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                        </Button>
+
+                        {/* BORRAR (CON CONFIRMACIÓN) */}
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="icon" title="Eliminar Transacción" className="text-destructive/70 hover:text-destructive hover:bg-destructive/10">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>¿Eliminar esta transacción?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Esta acción eliminará el registro del pago y <strong>restará el monto de la caja</strong>.
+                                <br /><br />
+                                Si fue una venta de productos, el stock <strong>no se repondrá automáticamente</strong> (deberás ajustarlo manualmente si es necesario).
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction
+                                className="bg-destructive hover:bg-destructive/90 text-white"
+                                onClick={() => deletePaymentMutation.mutate(payment.id)}
+                              >
+                                {deletePaymentMutation.isPending ? "Eliminando..." : "Eliminar"}
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))

@@ -39,7 +39,6 @@ import { PaymentDialog } from "@/components/payment-dialog";
 
 const statusOptions: { value: OrderStatus; label: string }[] = [
   { value: "recibido", label: "Recibido" },
-  { value: "diagnostico", label: "En Diagnóstico" },
   { value: "en_curso", label: "En Curso" },
   { value: "listo", label: "Listo para Entregar" },
   { value: "entregado", label: "Entregado" },
@@ -53,14 +52,13 @@ export default function OrderDetail() {
 
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
 
-  // 1. QUERY DE LA ORDEN (CON POLLING ACTIVADO)
+  // 1. QUERY DE LA ORDEN
   const { data: order, isLoading } = useQuery<RepairOrderWithDetails>({
     queryKey: ["/api/orders", orderId],
     enabled: !!orderId,
-    refetchInterval: 5000, // <--- ACTUALIZACIÓN AUTOMÁTICA (5 seg)
+    refetchInterval: 5000,
   });
 
-  // 2. QUERY DE SETTINGS (Para saber qué preguntas mostrar en el checklist)
   const { data: settings } = useQuery<Settings>({
     queryKey: ["/api/settings"],
   });
@@ -77,8 +75,8 @@ export default function OrderDetail() {
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       toast({
-        title: "Orden actualizada correctamente",
-        description: "Los cambios han sido guardados exitosamente.",
+        title: "Cambios guardados",
+        description: "La orden se actualizó correctamente.",
       });
     },
     onError: () => {
@@ -86,11 +84,9 @@ export default function OrderDetail() {
     },
   });
 
-  // --- LÓGICA WHATSAPP ---
   const openWhatsApp = (e: React.MouseEvent, phone: string | null | undefined) => {
     e.preventDefault();
     e.stopPropagation();
-
     if (!phone) return;
     const cleanPhone = phone.replace(/\D/g, '');
     window.open(`https://wa.me/${cleanPhone}`, '_blank');
@@ -127,7 +123,6 @@ export default function OrderDetail() {
 
   const currentData = { ...order, ...formData };
 
-  // Calculate finances
   const totalPaid = order.payments?.reduce((sum, p) => {
     if (p.items && p.items.length > 0) {
       const repairPayment = p.items
@@ -140,13 +135,21 @@ export default function OrderDetail() {
 
   const final = currentData.finalCost ?? 0;
   const estimated = currentData.estimatedCost ?? 0;
-
   const totalCost = final > 0 ? final : estimated;
   const isCostDefined = totalCost > 0;
   const balance = Math.max(0, totalCost - totalPaid);
 
+  // --- FUNCIÓN DE GUARDADO MANUAL ---
   const handleSave = () => {
     updateOrder.mutate(formData);
+  };
+
+  // --- FUNCIÓN DE GUARDADO AL DAR ENTER ---
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.currentTarget.blur(); // Quita el foco para mejorar la UX visual
+      handleSave();
+    }
   };
 
   return (
@@ -212,7 +215,13 @@ export default function OrderDetail() {
                   <Label>Estado</Label>
                   <Select
                     value={currentData.status}
-                    onValueChange={(value) => setFormData({ ...formData, status: value as OrderStatus })}
+                    onValueChange={(value) => {
+                      const newStatus = value as OrderStatus;
+                      const newData = { ...formData, status: newStatus };
+                      setFormData(newData);
+                      // --- AUTO-SAVE AL CAMBIAR ESTADO ---
+                      updateOrder.mutate(newData);
+                    }}
                   >
                     <SelectTrigger data-testid="select-status">
                       <SelectValue />
@@ -231,6 +240,7 @@ export default function OrderDetail() {
                   <Input
                     value={currentData.technicianName || ""}
                     onChange={(e) => setFormData({ ...formData, technicianName: e.target.value })}
+                    onKeyDown={handleKeyDown} // <-- AUTO-SAVE CON ENTER
                     placeholder="Nombre del técnico"
                     data-testid="input-technician"
                   />
@@ -305,6 +315,7 @@ export default function OrderDetail() {
                     type="number"
                     value={currentData.estimatedCost}
                     onChange={(e) => setFormData({ ...formData, estimatedCost: parseFloat(e.target.value) || 0 })}
+                    onKeyDown={handleKeyDown} // <-- AUTO-SAVE CON ENTER
                     min="0"
                     step="0.01"
                     data-testid="input-estimated-cost"
@@ -316,6 +327,7 @@ export default function OrderDetail() {
                     type="number"
                     value={currentData.finalCost}
                     onChange={(e) => setFormData({ ...formData, finalCost: parseFloat(e.target.value) || 0 })}
+                    onKeyDown={handleKeyDown} // <-- AUTO-SAVE CON ENTER
                     min="0"
                     step="0.01"
                     data-testid="input-final-cost"
@@ -468,7 +480,6 @@ export default function OrderDetail() {
                 </div>
               )}
 
-              {/* SECCIÓN DE BLOQUEO UNIFICADA */}
               <div className="pt-2 border-t mt-2">
                 <div className="flex items-center gap-2 mb-2">
                   {(!order.device.lockType || order.device.lockType === "NONE") ? (
@@ -546,7 +557,6 @@ export default function OrderDetail() {
             </CardContent>
           </Card>
 
-          {/* CHECKLIST DE RECEPCIÓN DINÁMICO */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
@@ -554,17 +564,13 @@ export default function OrderDetail() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              {/* MAGIA AQUÍ: Usamos la configuración o las claves guardadas */}
               {(settings?.checklistOptions || Object.keys(order.intakeChecklist || {})).map((item) => {
-                // Como ahora intakeChecklist es Record<string, string>, accedemos directo
                 const val = (order.intakeChecklist as any)?.[item];
-
                 let text = "Desconocido";
                 let color = "text-muted-foreground";
 
                 if (val === "yes") { text = "Sí"; color = "text-green-600 dark:text-green-400 font-medium"; }
                 else if (val === "no") { text = "No"; color = "text-red-600 dark:text-red-400 font-medium"; }
-                // Si es null/undefined, queda como Desconocido/Gris
 
                 return (
                   <div key={item} className="flex justify-between items-center text-sm border-b last:border-0 pb-2 last:pb-0">

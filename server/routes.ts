@@ -60,6 +60,7 @@ export async function registerRoutes(server: Server, app: Express) {
   app.post("/api/orders", async (req, res) => { try { const p = insertRepairOrderSchema.safeParse(req.body); if (!p.success) return res.status(400).json({ error: p.error.errors }); const u = await getUserId(req); res.status(201).json(await storage.createOrder({ ...p.data, userId: u, user_id: u } as any)); } catch (e) { res.status(500).json({ error: "Error" }); } });
   app.patch("/api/orders/:id", async (req, res) => { try { const u = await storage.updateOrder(req.params.id, req.body); if (!u) return res.status(404).json({ error: "Not found" }); res.json(u); } catch (e) { res.status(500).json({ error: "Error" }); } });
 
+  // --- PAGOS (PAYMENTS) ---
   app.get("/api/payments", async (req, res) => { try { const u = await getUserId(req); res.json(await storage.getPaymentsWithOrders(u)); } catch (e) { res.status(500).json({ error: "Error" }); } });
   app.post("/api/payments", async (req, res) => {
     try {
@@ -71,9 +72,30 @@ export async function registerRoutes(server: Server, app: Express) {
       res.status(201).json(result);
     } catch (e) { res.status(500).json({ error: "Error interno" }); }
   });
+  // NUEVO: BORRAR PAGO
+  app.delete("/api/payments/:id", async (req, res) => {
+    try {
+      // Opcional: Validar usuario con 'u' si tu storage lo soporta
+      // const u = await getUserId(req);
+      await storage.deletePayment(req.params.id);
+      res.sendStatus(204);
+    } catch (e) {
+      res.status(500).json({ error: "Error deleting payment" });
+    }
+  });
 
+  // --- GASTOS (EXPENSES) ---
   app.get("/api/expenses", async (req, res) => { try { const u = await getUserId(req); res.json(await storage.getExpenses(u)); } catch (e) { res.status(500).json({ error: "Error" }); } });
   app.post("/api/expenses", async (req, res) => { try { const p = insertExpenseSchema.safeParse(req.body); if (!p.success) return res.status(400).json({ error: p.error.errors }); const u = await getUserId(req); res.status(201).json(await storage.createExpense({ ...p.data, userId: u, user_id: u } as any)); } catch (e) { res.status(500).json({ error: "Error" }); } });
+  // NUEVO: BORRAR GASTO
+  app.delete("/api/expenses/:id", async (req, res) => {
+    try {
+      await storage.deleteExpense(req.params.id);
+      res.sendStatus(204);
+    } catch (e) {
+      res.status(500).json({ error: "Error deleting expense" });
+    }
+  });
 
   app.get("/api/stats", async (req, res) => { try { const u = await getUserId(req); res.json(await storage.getStats(u)); } catch (e) { res.status(500).json({ error: "Error" }); } });
 

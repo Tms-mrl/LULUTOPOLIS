@@ -15,15 +15,14 @@ import { z } from "zod";
 // --------------------------------------------------------------------------
 // 1. CONSTANTES
 // --------------------------------------------------------------------------
-export const orderStatuses = ["recibido", "diagnostico", "en_curso", "listo", "entregado"] as const;
+// --- CAMBIO: Se eliminó "diagnostico" para unificar con "en_curso" ---
+export const orderStatuses = ["recibido", "en_curso", "listo", "entregado"] as const;
 export type OrderStatus = typeof orderStatuses[number];
 
 export const paymentMethods = ["efectivo", "tarjeta", "transferencia"] as const;
 export type PaymentMethod = typeof paymentMethods[number];
 
-// --- CAMBIO IMPORTANTE: Checklist dinámico ---
-// Ya no usamos claves fijas como "charges", sino un mapa libre de Texto -> Valor
-// Valores: "yes", "no". Si no está, es "unknown".
+// Checklist dinámico
 export const intakeChecklistSchema = z.record(
   z.string(),
   z.enum(["yes", "no"]).nullable().optional()
@@ -152,10 +151,12 @@ export const settings = pgTable("settings", {
   transferSurcharge: decimal("transfer_surcharge", { precision: 10, scale: 2 }).default("0"),
   receiptDisclaimer: text("receipt_disclaimer").default("Garantía de 30 días."),
   ticketFooter: text("ticket_footer").default("Gracias por su compra.\nConserve este ticket para garantía."),
-  // Lista de opciones del checklist
   checklistOptions: text("checklist_options").array().default(["¿Carga?", "¿Enciende?", "¿Golpeado?", "¿Mojado?", "¿Abierto previamente?", "¿En garantía?", "¿Micro SD?", "¿Porta SIM?", "¿Tarjeta SIM?"]),
-  // --- NUEVO CAMPO: Formato de Impresión (a4 o ticket) ---
   printFormat: text("print_format").default("a4"),
+
+  // --- NUEVO CAMPO: Hora de Corte de Jornada (0-23) ---
+  dayCutoffHour: integer("day_cutoff_hour").default(0),
+
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
@@ -235,10 +236,12 @@ export type Expense = Omit<typeof expenses.$inferSelect, "amount"> & {
 };
 export type InsertExpense = z.infer<typeof insertExpenseSchema>;
 
-// Settings (AQUÍ HABILITAMOS EL CAMPO NUEVO)
+// Settings
 export const insertSettingsSchema = createInsertSchema(settings, {
   cardSurcharge: z.coerce.number(),
   transferSurcharge: z.coerce.number(),
+  // Validación de hora (0-23)
+  dayCutoffHour: z.coerce.number().min(0).max(23),
 }).pick({
   shopName: true,
   address: true,
@@ -252,7 +255,8 @@ export const insertSettingsSchema = createInsertSchema(settings, {
   receiptDisclaimer: true,
   ticketFooter: true,
   checklistOptions: true,
-  printFormat: true, // <--- NUEVO CAMPO HABILITADO
+  printFormat: true,
+  dayCutoffHour: true,
 });
 export type Settings = Omit<typeof settings.$inferSelect, "cardSurcharge" | "transferSurcharge"> & {
   cardSurcharge: number;

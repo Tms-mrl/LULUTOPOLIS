@@ -35,7 +35,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { Client, Device, Settings } from "@shared/schema";
+import type { Client, Device, Settings, RepairOrder } from "@shared/schema";
 import { DeviceSelection } from "@/components/orders/device-selection";
 import { OrderDetails } from "@/components/orders/order-details";
 import { orderFormSchema, newDeviceSchema, OrderFormValues, NewDeviceValues } from "@/components/orders/schemas";
@@ -171,11 +171,14 @@ export default function NewOrder() {
       });
       return res.json();
     },
-    onSuccess: () => {
+    // --- CAMBIO CLAVE AQUÍ: Recibimos la nueva orden y redirigimos a su ID ---
+    onSuccess: (newOrder: RepairOrder) => {
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       toast({ title: "Orden creada exitosamente" });
-      navigate("/ordenes");
+
+      // Redirección directa al detalle de la nueva orden
+      navigate(`/ordenes/${newOrder.id}`);
     },
     onError: () => {
       toast({ title: "Error al crear la orden", variant: "destructive" });

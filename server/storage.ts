@@ -147,6 +147,7 @@ export const settings = pgTable("settings", {
   ticketFooter: text("ticket_footer").default("Gracias por su compra.\nConserve este ticket para garantía."),
   checklistOptions: text("checklist_options").array().default(["¿Carga?", "¿Enciende?", "¿Golpeado?", "¿Mojado?", "¿Abierto previamente?", "¿En garantía?", "¿Micro SD?", "¿Porta SIM?", "¿Tarjeta SIM?"]),
   printFormat: text("print_format").default("a4"),
+  dayCutoffHour: integer("day_cutoff_hour").default(0),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
@@ -234,7 +235,8 @@ export const insertSettingsSchema = createInsertSchema(settings, {
   receiptDisclaimer: true,
   ticketFooter: true,
   checklistOptions: true,
-  printFormat: true, // <--- HABILITADO
+  printFormat: true,
+  dayCutoffHour: true,
 });
 export type Settings = Omit<typeof settings.$inferSelect, "cardSurcharge" | "transferSurcharge"> & {
   cardSurcharge: number;
@@ -271,6 +273,8 @@ export interface IStorage {
 
   getPaymentsWithOrders(userId: string): Promise<(Payment & { order?: RepairOrder })[]>;
   createPayment(payment: InsertPayment & { userId: string, items: PaymentItem[] }): Promise<Payment>;
+  // NUEVO:
+  deletePayment(id: string): Promise<void>;
 
   getProducts(userId: string): Promise<Product[]>;
   createProduct(product: InsertProduct & { userId: string }): Promise<Product>;
@@ -279,6 +283,8 @@ export interface IStorage {
 
   getExpenses(userId: string): Promise<Expense[]>;
   createExpense(expense: InsertExpense & { userId: string }): Promise<Expense>;
+  // NUEVO:
+  deleteExpense(id: string): Promise<void>;
 
   getStats(userId: string): Promise<any>;
 
@@ -353,7 +359,6 @@ export class SupabaseStorage implements IStorage {
     };
   }
 
-  // --- MAP SETTINGS ACTUALIZADO ---
   private mapSettings(row: any): Settings {
     return {
       id: row.id,
@@ -370,7 +375,8 @@ export class SupabaseStorage implements IStorage {
       receiptDisclaimer: row.receipt_disclaimer,
       ticketFooter: row.ticket_footer,
       checklistOptions: row.checklist_options || [],
-      printFormat: row.print_format || "a4", // <--- LEER CAMPO
+      printFormat: row.print_format || "a4",
+      dayCutoffHour: row.day_cutoff_hour || 0,
       updatedAt: row.updated_at ? new Date(row.updated_at) : null
     };
   }
@@ -609,6 +615,12 @@ export class SupabaseStorage implements IStorage {
     return this.mapPayment(data);
   }
 
+  // NUEVO: BORRAR PAGO
+  async deletePayment(id: string): Promise<void> {
+    const { error } = await supabase.from("payments").delete().eq("id", id);
+    if (error) throw error;
+  }
+
   async getExpenses(userId: string): Promise<Expense[]> {
     const { data } = await supabase.from("expenses").select("*").eq("user_id", userId).order("date", { ascending: false });
     return (data || []).map(e => ({
@@ -641,18 +653,47 @@ export class SupabaseStorage implements IStorage {
     };
   }
 
+  // NUEVO: BORRAR GASTO
+  async deleteExpense(id: string): Promise<void> {
+    const { error } = await supabase.from("expenses").delete().eq("id", id);
+    if (error) throw error;
+  }
+
   async getStats(userId: string): Promise<any> {
+    const settings = await this.getSettings(userId);
+    const cutoffHour = settings?.dayCutoffHour || 0;
+
+    const now = new Date();
+    const currentHour = now.getHours();
+
+    let startOfBusinessDay = new Date(now);
+    startOfBusinessDay.setHours(cutoffHour, 0, 0, 0);
+
+    if (currentHour < cutoffHour) {
+      startOfBusinessDay.setDate(startOfBusinessDay.getDate() - 1);
+    }
+
+    const filterDate = startOfBusinessDay.toISOString();
+
     const { data: orders } = await supabase.from("repair_orders").select("status, final_cost").eq("user_id", userId);
     const activeOrders = orders?.filter(o => ["recibido", "diagnostico", "en_curso"].includes(o.status)).length || 0;
     const pendingDiagnosis = orders?.filter(o => o.status === "recibido").length || 0;
     const readyPickup = orders?.filter(o => o.status === "listo").length || 0;
 
-    const today = new Date().toISOString().split('T')[0];
+    const { data: payments } = await supabase
+      .from("payments")
+      .select("amount")
+      .eq("user_id", userId)
+      .gte("date", filterDate);
 
-    const { data: payments } = await supabase.from("payments").select("amount").eq("user_id", userId).gte("date", today);
     const dailyIncome = payments?.reduce((sum, p) => sum + parseFloat(p.amount), 0) || 0;
 
-    const { data: expenses } = await supabase.from("expenses").select("amount").eq("user_id", userId).gte("date", today);
+    const { data: expenses } = await supabase
+      .from("expenses")
+      .select("amount")
+      .eq("user_id", userId)
+      .gte("date", filterDate);
+
     const dailyExpenses = expenses?.reduce((sum, e) => sum + parseFloat(e.amount), 0) || 0;
 
     return {
@@ -750,7 +791,6 @@ export class SupabaseStorage implements IStorage {
     return this.mapSettings(data);
   }
 
-  // --- UPDATE SETTINGS ACTUALIZADO ---
   async updateSettings(userId: string, settings: InsertSettings): Promise<Settings> {
     const existing = await this.getSettings(userId);
 
@@ -768,7 +808,8 @@ export class SupabaseStorage implements IStorage {
       receipt_disclaimer: settings.receiptDisclaimer,
       ticket_footer: settings.ticketFooter,
       checklist_options: settings.checklistOptions,
-      print_format: settings.printFormat, // <--- GUARDADO DEL CAMPO
+      print_format: settings.printFormat,
+      day_cutoff_hour: settings.dayCutoffHour,
       updated_at: new Date()
     };
 

@@ -30,9 +30,9 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { format, isSameDay, isSameMonth, subMonths } from "date-fns";
+import { format, isSameDay, isSameMonth, subMonths, subDays } from "date-fns";
 import { es } from "date-fns/locale";
-import type { Payment, Expense, RepairOrderWithDetails } from "@shared/schema";
+import type { Payment, Expense, RepairOrderWithDetails, Settings } from "@shared/schema";
 import {
   BarChart,
   Bar,
@@ -48,7 +48,8 @@ import {
 
 type Transaction = {
   id: string;
-  date: Date;
+  date: Date; // Fecha real
+  logicalDate: Date; // Fecha contable (ajustada por corte)
   type: "income" | "expense";
   category: string;
   description: string;
@@ -69,6 +70,10 @@ export default function Reports() {
   const [filterPeriod, setFilterPeriod] = useState<"all" | "month" | "today">("today");
 
   // --- QUERIES ---
+  const { data: settings } = useQuery<Settings>({
+    queryKey: ["/api/settings"],
+  });
+
   const { data: payments = [], isLoading: loadingPayments } = useQuery<(Payment & { order?: RepairOrderWithDetails })[]>({
     queryKey: ["/api/payments"],
   });
@@ -81,57 +86,90 @@ export default function Reports() {
     queryKey: ["/api/orders"],
   });
 
+  // --- HELPER: CALCULAR FECHA LÓGICA ---
+  // Si la hora de la transacción es menor a la hora de corte, pertenece al día anterior.
+  const getLogicalDate = (date: Date, cutoffHour: number = 0): Date => {
+    const d = new Date(date);
+    if (d.getHours() < cutoffHour) {
+      return subDays(d, 1);
+    }
+    return d;
+  };
+
+  const cutoffHour = settings?.dayCutoffHour || 0;
+
   // --- DATOS TRANSACCIONALES ---
   const transactions: Transaction[] = useMemo(() => {
-    const income: Transaction[] = payments.map(p => ({
-      id: p.id,
-      date: new Date(p.date),
-      type: "income",
-      category: p.orderId ? "Reparación" : "Venta",
-      description: p.notes || (p.orderId ? `Cobro Orden #${p.orderId.slice(0, 4)}` : "Venta General"),
-      method: p.method,
-      amount: Number(p.amount)
-    }));
+    const income: Transaction[] = payments.map(p => {
+      const date = new Date(p.date);
+      return {
+        id: p.id,
+        date: date,
+        logicalDate: getLogicalDate(date, cutoffHour),
+        type: "income",
+        category: p.orderId ? "Reparación" : "Venta",
+        description: p.notes || (p.orderId ? `Cobro Orden #${p.orderId.slice(0, 4)}` : "Venta General"),
+        method: p.method,
+        amount: Number(p.amount)
+      };
+    });
 
-    const outflow: Transaction[] = expenses.map(e => ({
-      id: e.id,
-      date: new Date(e.date),
-      type: "expense",
-      category: e.category,
-      description: e.description,
-      method: "Efectivo",
-      amount: Number(e.amount)
-    }));
+    const outflow: Transaction[] = expenses.map(e => {
+      const date = new Date(e.date);
+      return {
+        id: e.id,
+        date: date,
+        logicalDate: getLogicalDate(date, cutoffHour),
+        type: "expense",
+        category: e.category,
+        description: e.description,
+        method: "Efectivo",
+        amount: Number(e.amount)
+      };
+    });
 
     return [...income, ...outflow].sort((a, b) => b.date.getTime() - a.date.getTime());
-  }, [payments, expenses]);
+  }, [payments, expenses, cutoffHour]);
 
   // --- FILTRADO PARA TABLA ---
   const filteredData = useMemo(() => {
-    const now = new Date();
+    // Calculamos el "hoy lógico"
+    const nowReal = new Date();
+    const nowLogical = getLogicalDate(nowReal, cutoffHour);
+
     if (filterPeriod === "all") return transactions;
 
     return transactions.filter(t => {
-      if (filterPeriod === "today") return isSameDay(t.date, now);
-      if (filterPeriod === "month") return isSameMonth(t.date, now);
+      // Comparamos siempre usando las fechas LÓGICAS
+      if (filterPeriod === "today") return isSameDay(t.logicalDate, nowLogical);
+      if (filterPeriod === "month") return isSameMonth(t.logicalDate, nowLogical);
       return true;
     });
-  }, [transactions, filterPeriod]);
+  }, [transactions, filterPeriod, cutoffHour]);
 
-  // --- DATOS PARA GRÁFICOS (ÚLTIMOS 6 MESES) ---
+  // --- DATOS PARA GRÁFICOS (ÚLTIMOS 6 MESES LÓGICOS) ---
   const chartsData = useMemo(() => {
     const data: MonthlySummary[] = [];
-    const now = new Date();
+    const nowReal = new Date();
+    const nowLogical = getLogicalDate(nowReal, cutoffHour);
 
     for (let i = 5; i >= 0; i--) {
-      const date = subMonths(now, i);
+      const date = subMonths(nowLogical, i); // Meses hacia atrás desde el "hoy lógico"
       const monthKey = format(date, "yyyy-MM");
       const monthLabel = format(date, "MMM", { locale: es }).toUpperCase();
 
-      const monthTransactions = transactions.filter(t => format(t.date, "yyyy-MM") === monthKey);
+      // Filtramos transacciones por su fecha LÓGICA
+      const monthTransactions = transactions.filter(t => format(t.logicalDate, "yyyy-MM") === monthKey);
+
       const income = monthTransactions.filter(t => t.type === "income").reduce((acc, curr) => acc + curr.amount, 0);
       const expense = monthTransactions.filter(t => t.type === "expense").reduce((acc, curr) => acc + curr.amount, 0);
-      const ordersCount = orders.filter(o => format(new Date(o.createdAt), "yyyy-MM") === monthKey).length;
+
+      // Para órdenes también aplicamos lógica si queremos ser precisos, aunque suele ser menos crítico
+      const monthOrders = orders.filter(o => {
+        const d = new Date(o.createdAt);
+        const ld = getLogicalDate(d, cutoffHour);
+        return format(ld, "yyyy-MM") === monthKey;
+      }).length;
 
       data.push({
         id: monthKey,
@@ -139,22 +177,25 @@ export default function Reports() {
         income,
         expense,
         balance: income - expense,
-        ordersCount
+        ordersCount: monthOrders
       });
     }
     return data;
-  }, [transactions, orders]);
+  }, [transactions, orders, cutoffHour]);
 
   // --- DATOS MENSUALES TABLA (MODO HISTORIAL) ---
   const monthlyTableData = useMemo(() => {
     if (filterPeriod !== "all") return [];
     const groups: Record<string, MonthlySummary> = {};
+
     transactions.forEach(t => {
-      const key = format(t.date, "yyyy-MM");
+      // Agrupamos por fecha LÓGICA
+      const key = format(t.logicalDate, "yyyy-MM");
+
       if (!groups[key]) {
         groups[key] = {
           id: key,
-          label: format(t.date, "MMMM yyyy", { locale: es }),
+          label: format(t.logicalDate, "MMMM yyyy", { locale: es }),
           income: 0,
           expense: 0,
           balance: 0,
@@ -165,6 +206,7 @@ export default function Reports() {
       else groups[key].expense += t.amount;
       groups[key].balance = groups[key].income - groups[key].expense;
     });
+
     return Object.values(groups).sort((a, b) => b.id.localeCompare(a.id));
   }, [transactions, filterPeriod]);
 
@@ -183,9 +225,10 @@ export default function Reports() {
   };
 
   const handleExportCSV = () => {
-    const headers = ["Fecha", "Tipo", "Categoría", "Descripción", "Método", "Monto"];
+    const headers = ["Fecha Real", "Fecha Contable", "Tipo", "Categoría", "Descripción", "Método", "Monto"];
     const rows = filteredData.map(t => [
       format(t.date, "dd/MM/yyyy HH:mm"),
+      format(t.logicalDate, "dd/MM/yyyy"), // Agregamos columna útil para el contador
       t.type === "income" ? "Ingreso" : "Gasto",
       t.category,
       `"${t.description.replace(/"/g, '""')}"`,
@@ -220,7 +263,7 @@ export default function Reports() {
               <SelectValue placeholder="Periodo" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="today">Hoy</SelectItem>
+              <SelectItem value="today">Hoy (Jornada)</SelectItem>
               <SelectItem value="month">Este Mes</SelectItem>
               <SelectItem value="all">Todo el Historial</SelectItem>
             </SelectContent>
@@ -345,7 +388,15 @@ export default function Reports() {
                           ) : (
                             filteredData.map((t) => (
                               <TableRow key={t.id}>
-                                <TableCell className="font-medium">{format(t.date, "dd/MM/yyyy HH:mm")}</TableCell>
+                                <TableCell className="font-medium">
+                                  {format(t.date, "dd/MM/yyyy HH:mm")}
+                                  {/* Indicador visual si la fecha lógica es diferente */}
+                                  {t.date.getDate() !== t.logicalDate.getDate() && (
+                                    <span className="block text-[10px] text-muted-foreground font-normal">
+                                      (Contable: {format(t.logicalDate, "dd/MM")})
+                                    </span>
+                                  )}
+                                </TableCell>
                                 <TableCell>
                                   <Badge variant={t.type === "income" ? "default" : "destructive"} className={t.type === "income" ? "bg-green-600 hover:bg-green-700" : ""}>
                                     {t.type === "income" ? "Ingreso" : "Gasto"}

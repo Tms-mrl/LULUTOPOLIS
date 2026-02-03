@@ -87,6 +87,7 @@ export default function NewClient() {
                       <FormControl>
                         <Input
                           {...field}
+                          value={field.value ?? ""} // PROTECCIÓN CONTRA NULOS
                           placeholder="Juan Pérez"
                           data-testid="input-client-name"
                         />
@@ -105,6 +106,7 @@ export default function NewClient() {
                       <FormControl>
                         <Input
                           {...field}
+                          value={field.value ?? ""} // PROTECCIÓN CONTRA NULOS
                           placeholder="12.345.678"
                           data-testid="input-client-dni"
                         />
@@ -123,6 +125,7 @@ export default function NewClient() {
                       <FormControl>
                         <Input
                           {...field}
+                          value={field.value ?? ""} // PROTECCIÓN CONTRA NULOS
                           placeholder="Av. Ejemplo 123, Ciudad"
                           data-testid="input-client-address"
                         />
@@ -141,6 +144,7 @@ export default function NewClient() {
                       <FormControl>
                         <Input
                           {...field}
+                          value={field.value ?? ""} // PROTECCIÓN CONTRA NULOS
                           placeholder="+54 11 1234-5678"
                           data-testid="input-client-phone"
                         />
@@ -159,6 +163,7 @@ export default function NewClient() {
                       <FormControl>
                         <Input
                           {...field}
+                          value={field.value ?? ""} // PROTECCIÓN CONTRA NULOS
                           type="email"
                           placeholder="cliente@email.com"
                           data-testid="input-client-email"
@@ -178,6 +183,7 @@ export default function NewClient() {
                       <FormControl>
                         <Input
                           {...field}
+                          value={field.value ?? ""} // PROTECCIÓN CONTRA NULOS
                           placeholder="Nombre de autorizado (opcional)"
                           data-testid="input-client-who-picks-up"
                         />
@@ -197,6 +203,7 @@ export default function NewClient() {
                     <FormControl>
                       <Textarea
                         {...field}
+                        value={field.value ?? ""} // PROTECCIÓN CONTRA NULOS
                         placeholder="Información adicional sobre el cliente..."
                         data-testid="input-client-notes"
                       />

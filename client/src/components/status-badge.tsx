@@ -1,7 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { 
   Inbox, 
-  Search, 
   Wrench, 
   CheckCircle2, 
   PackageCheck 
@@ -16,33 +15,31 @@ const statusConfig: Record<OrderStatus, {
 }> = {
   recibido: {
     label: "Recibido",
-    variant: "secondary",
+    variant: "outline",
     icon: Inbox,
-    className: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
-  },
-  diagnostico: {
-    label: "Diagnóstico",
-    variant: "default",
-    icon: Search,
-    className: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
+    // Gris/Zinc
+    className: "bg-zinc-500/10 text-zinc-600 border-zinc-200 dark:bg-zinc-500/20 dark:text-zinc-300 dark:border-zinc-500/50",
   },
   en_curso: {
     label: "En Curso",
-    variant: "default",
+    variant: "outline",
     icon: Wrench,
-    className: "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300",
+    // Ámbar/Naranja
+    className: "bg-amber-500/10 text-amber-600 border-amber-200 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/50",
   },
   listo: {
     label: "Listo",
-    variant: "default",
+    variant: "outline",
     icon: CheckCircle2,
-    className: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
+    // Verde
+    className: "bg-green-500/10 text-green-600 border-green-200 dark:bg-green-500/20 dark:text-green-300 dark:border-green-500/50",
   },
   entregado: {
     label: "Entregado",
-    variant: "secondary",
+    variant: "outline",
     icon: PackageCheck,
-    className: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
+    // Azul
+    className: "bg-blue-500/10 text-blue-600 border-blue-200 dark:bg-blue-500/20 dark:text-blue-300 dark:border-blue-500/50",
   },
 };
 
@@ -52,13 +49,14 @@ interface StatusBadgeProps {
 }
 
 export function StatusBadge({ status, showIcon = true }: StatusBadgeProps) {
-const config = statusConfig[status as keyof typeof statusConfig] ?? statusConfig["recibido"];
-const Icon = config.icon;
+  // Fallback seguro por si llega un estado antiguo
+  const config = statusConfig[status as keyof typeof statusConfig] ?? statusConfig["recibido"];
+  const Icon = config.icon;
 
   return (
     <Badge 
       variant="outline" 
-      className={`${config.className} border-0 gap-1.5`}
+      className={`${config.className} border gap-1.5 font-medium`}
       data-testid={`badge-status-${status}`}
     >
       {showIcon && <Icon className="h-3 w-3" />}

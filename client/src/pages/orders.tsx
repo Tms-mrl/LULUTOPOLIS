@@ -21,7 +21,6 @@ import { es } from "date-fns/locale";
 const statusFilters: { value: OrderStatus | "all"; label: string }[] = [
   { value: "all", label: "Todas" },
   { value: "recibido", label: "Recibidas" },
-  { value: "diagnostico", label: "Diagnóstico" },
   { value: "en_curso", label: "En Curso" },
   { value: "listo", label: "Listas" },
   { value: "entregado", label: "Entregadas" },
@@ -31,29 +30,24 @@ export default function Orders() {
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "all">("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Queries
   const { data: orders, isLoading: isLoadingOrders } = useQuery<RepairOrderWithDetails[]>({
     queryKey: ["/api/orders"],
-    refetchInterval: 5000, // <--- ACTUALIZACIÓN AUTOMÁTICA (5 segundos)
+    refetchInterval: 5000,
   });
 
-  // Necesitamos los pagos para calcular el estado financiero
   const { data: payments = [] } = useQuery<Payment[]>({
     queryKey: ["/api/payments"],
-    refetchInterval: 5000, // <--- ACTUALIZACIÓN AUTOMÁTICA (5 segundos)
+    refetchInterval: 5000,
   });
 
-  // --- LOGICA WHATSAPP ---
   const openWhatsApp = (e: React.MouseEvent, phone: string | null | undefined) => {
-    e.preventDefault(); // Evita entrar a la orden
+    e.preventDefault();
     e.stopPropagation();
-
     if (!phone) return;
     const cleanPhone = phone.replace(/\D/g, '');
     window.open(`https://wa.me/${cleanPhone}`, '_blank');
   };
 
-  // --- LOGICA ESTADO DE PAGO ---
   const getPaymentStatus = (order: RepairOrderWithDetails) => {
     const orderPayments = payments.filter(p => p.orderId === order.id);
     const totalPaid = orderPayments.reduce((sum, p) => sum + Number(p.amount), 0);
@@ -76,6 +70,32 @@ export default function Orders() {
     return matchesStatus && matchesSearch;
   });
 
+  // --- HELPER PARA COLORES DE ESTADO (BADGES) ---
+  const getStatusBadgeStyles = (status: string) => {
+    switch (status) {
+      case 'recibido':
+        return 'bg-zinc-500/20 text-zinc-300 border-zinc-500/50';
+      case 'en_curso':
+        return 'bg-amber-500/20 text-amber-300 border-amber-500/50';
+      case 'listo':
+        return 'bg-green-500/20 text-green-300 border-green-500/50';
+      case 'entregado':
+        return 'bg-blue-500/20 text-blue-300 border-blue-500/50';
+      default:
+        return 'bg-gray-500/20 text-gray-300 border-gray-500/50';
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'recibido': return 'Recibido';
+      case 'en_curso': return 'En Curso';
+      case 'listo': return 'Listo';
+      case 'entregado': return 'Entregado';
+      default: return status;
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -83,7 +103,8 @@ export default function Orders() {
           <h1 className="text-2xl font-semibold">Órdenes de Reparación</h1>
           <p className="text-muted-foreground">Gestiona todas las órdenes del taller</p>
         </div>
-        <Button asChild data-testid="button-new-order">
+        {/* --- BOTÓN ESTILO PREMIUM --- */}
+        <Button asChild data-testid="button-new-order" className="bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40 border border-blue-500/50 transition-all hover:scale-[1.02] active:scale-95">
           <Link href="/ordenes/nueva">
             <Plus className="h-4 w-4 mr-2" />
             Nueva Orden
@@ -139,63 +160,54 @@ export default function Orders() {
 
             return (
               <Link key={order.id} href={`/ordenes/${order.id}`}>
-                <div className="cursor-pointer group relative overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900 text-white shadow-sm transition-all hover:shadow-md hover:scale-[1.02]">
-                  <div className="p-4 space-y-3">
-                    {/* Header */}
+                <div className="cursor-pointer group relative overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800 bg-gradient-to-br from-white to-zinc-100 dark:from-zinc-800 dark:to-black shadow-sm transition-all duration-300 hover:shadow-lg hover:scale-[1.02] hover:border-primary/50">
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+                  <div className="p-4 space-y-3 relative z-10">
                     <div className="flex justify-between items-start gap-2">
-                      <h3 className="font-bold text-sm tracking-tight truncate pr-2">
+                      <h3 className="font-bold text-sm tracking-tight truncate pr-2 text-foreground">
                         {order.device.brand} {order.device.model}
                       </h3>
-                      <div className={`text-[10px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider border 
-                        ${order.status === 'listo' ? 'bg-green-500/20 text-green-300 border-green-500/50' :
-                          order.status === 'en_curso' ? 'bg-blue-500/20 text-blue-300 border-blue-500/50' :
-                            'bg-gray-500/20 text-gray-300 border-gray-500/50'}`}>
-                        {order.status === 'en_curso' ? 'En Curso' : order.status}
+                      <div className={`text-[10px] px-2 py-0.5 rounded-md uppercase font-bold tracking-wider border shadow-sm
+                        ${getStatusBadgeStyles(order.status)}`}>
+                        {getStatusLabel(order.status)}
                       </div>
                     </div>
-
-                    {/* Body */}
                     <div className="space-y-1">
                       <div className="flex items-center justify-between">
-                        <p className="text-xs text-gray-400 font-medium truncate">
+                        <p className="text-xs text-muted-foreground font-medium truncate flex items-center gap-1">
                           {order.client.name}
                         </p>
-                        {/* Botón WhatsApp Estilo Dark Glass */}
                         {order.client.phone && (
                           <div
                             role="button"
                             onClick={(e) => openWhatsApp(e, order.client.phone)}
-                            className="p-1.5 rounded-full bg-black/40 border border-green-600/40 text-green-600 hover:bg-green-900/30 hover:border-green-500/60 hover:text-green-400 transition-all z-20 backdrop-blur-sm flex items-center justify-center"
+                            className="p-2 rounded-full bg-black/40 border border-green-600/40 text-green-600 hover:bg-green-900/30 hover:border-green-500/60 hover:text-green-400 transition-all z-20 backdrop-blur-sm flex items-center justify-center shadow-sm hover:shadow-green-900/20"
                             title="Abrir WhatsApp"
                           >
                             <MessageCircle className="h-4 w-4" />
                           </div>
                         )}
                       </div>
-                      <p className="text-xs text-gray-500 truncate">
-                        {order.problem}
+                      <p className="text-xs text-muted-foreground/80 truncate pl-0.5 border-l-2 border-primary/20">
+                        &nbsp;{order.problem}
                       </p>
                     </div>
-
-                    {/* Footer */}
-                    <div className="pt-2 border-t border-gray-700/50 flex justify-between items-center text-xs">
-                      <span className="text-gray-400">
+                    <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800/50 flex justify-between items-center text-xs">
+                      <span className="text-muted-foreground">
                         {format(new Date(order.createdAt), "dd/MM", { locale: es })}
                       </span>
-
-                      {/* Payment Badge */}
                       {payStatus === 'paid' && (
-                        <span className="text-green-400 font-bold flex items-center gap-1">
+                        <span className="text-green-600 dark:text-green-400 font-bold flex items-center gap-1 bg-green-100 dark:bg-green-900/20 px-2 py-0.5 rounded-full">
                           Pagado <CheckCircle2 className="w-3 h-3" />
                         </span>
                       )}
                       {payStatus === 'partial' && (
-                        <span className="text-amber-400 font-bold">
-                          Pago Parcial
+                        <span className="text-amber-600 dark:text-amber-400 font-bold bg-amber-100 dark:bg-amber-900/20 px-2 py-0.5 rounded-full">
+                          Parcial
                         </span>
                       )}
                       {payStatus === 'unpaid' && (
-                        <span className="text-gray-600">
+                        <span className="text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800/50 px-2 py-0.5 rounded-full">
                           Pendiente
                         </span>
                       )}
@@ -203,7 +215,7 @@ export default function Orders() {
                   </div>
                 </div>
               </Link>
-            );
+            )
           })}
         </div>
       ) : (

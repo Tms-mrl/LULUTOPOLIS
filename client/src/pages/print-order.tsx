@@ -273,16 +273,21 @@ export default function OrderPrint() {
     }
 
     return (
-        <div className="min-h-screen bg-gray-100 p-8 print:p-0 print:bg-white font-sans print:overflow-hidden">
+        <div className="min-h-screen bg-slate-100 p-8 print:p-0 print:bg-white font-sans print:overflow-hidden">
             {/* BOTONES */}
             <div className="max-w-[210mm] mx-auto mb-6 flex justify-between print:hidden">
-                <Button variant="outline" asChild>
+                {/* Forzamos el botón a ser negro con clases de Tailwind para que no dependa del tema oscuro */}
+                <Button
+                    asChild
+                    className="bg-slate-900 text-white hover:bg-slate-800 border-none"
+                >
                     <Link href={`/ordenes/${orderId}`}>
                         <ArrowLeft className="mr-2 h-4 w-4" />
                         Volver a la Orden
                     </Link>
                 </Button>
-                <Button onClick={() => window.print()}>
+
+                <Button onClick={() => window.print()} className="bg-blue-600 hover:bg-blue-700 text-white">
                     <Printer className="mr-2 h-4 w-4" />
                     Imprimir
                 </Button>

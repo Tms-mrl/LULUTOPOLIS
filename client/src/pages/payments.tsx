@@ -8,7 +8,8 @@ import {
   type Product,
   type PaymentItem,
   type Settings,
-  type InsertExpense
+  type InsertExpense,
+  type Expense
 } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -26,7 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Plus, Search, ShoppingBag, Wrench, Trash2, ShoppingCart, DollarSign, TrendingDown, Printer } from "lucide-react";
+import { Plus, Search, ShoppingBag, Wrench, Trash2, ShoppingCart, DollarSign, TrendingDown, Printer, ArrowUpCircle, ArrowDownCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -65,6 +66,11 @@ import { cn } from "@/lib/utils";
 import { Check } from "lucide-react";
 import { printTicket } from "@/lib/printer";
 
+// Tipo unificado para mostrar en la tabla
+type Transaction =
+  | ({ type: 'payment' } & Payment & { order?: RepairOrderWithDetails })
+  | ({ type: 'expense' } & Expense);
+
 export default function Payments() {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
@@ -94,6 +100,10 @@ export default function Payments() {
   // --- QUERIES ---
   const { data: payments = [] } = useQuery<(Payment & { order?: RepairOrderWithDetails })[]>({
     queryKey: ["/api/payments"],
+  });
+
+  const { data: expenses = [] } = useQuery<Expense[]>({
+    queryKey: ["/api/expenses"],
   });
 
   const { data: orders = [] } = useQuery<RepairOrderWithDetails[]>({
@@ -205,6 +215,7 @@ export default function Payments() {
       return res.json();
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       toast({ title: "Gasto registrado correctamente" });
       setIsOpenExpense(false);
@@ -228,9 +239,23 @@ export default function Payments() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/stats"] }); // Actualizar caja
-      // Opcional: Actualizar órdenes y productos si se revierten stocks (depende de tu lógica backend avanzada)
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       toast({ title: "Transacción eliminada", description: "Se ha descontado de la caja." });
+    },
+    onError: () => {
+      toast({ title: "Error al eliminar", variant: "destructive" });
+    },
+  });
+
+  // --- MUTATION: ELIMINAR GASTO ---
+  const deleteExpenseMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/expenses/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
+      toast({ title: "Gasto eliminado", description: "El monto ha vuelto a la caja." });
     },
     onError: () => {
       toast({ title: "Error al eliminar", variant: "destructive" });
@@ -267,10 +292,26 @@ export default function Payments() {
     }).format(amount);
   };
 
-  const filteredPayments = payments.filter((payment) => {
+  // --- COMBINAR Y FILTRAR TRANSACCIONES ---
+  const allTransactions: Transaction[] = [
+    ...payments.map(p => ({ ...p, type: 'payment' as const })),
+    ...expenses.map(e => ({ ...e, type: 'expense' as const }))
+  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  const filteredTransactions = allTransactions.filter((item) => {
     const searchLower = searchTerm.toLowerCase();
-    const notes = (payment.notes || "").toLowerCase();
-    return notes.includes(searchLower);
+
+    if (item.type === 'payment') {
+      const notes = (item.notes || "").toLowerCase();
+      const clientName = item.order?.client?.name.toLowerCase() || "";
+      const deviceModel = item.order?.device?.model.toLowerCase() || "";
+
+      return notes.includes(searchLower) || clientName.includes(searchLower) || deviceModel.includes(searchLower);
+    } else {
+      const desc = item.description.toLowerCase();
+      const cat = item.category.toLowerCase();
+      return desc.includes(searchLower) || cat.includes(searchLower);
+    }
   });
 
   return (
@@ -347,6 +388,7 @@ export default function Payments() {
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[800px] h-[90vh] flex flex-col p-0 gap-0">
+              {/* ... (Contenido del diálogo de venta igual que antes) ... */}
               <DialogHeader className="px-6 py-4 border-b">
                 <DialogTitle>Nueva Venta / Cobro</DialogTitle>
               </DialogHeader>
@@ -625,7 +667,6 @@ export default function Payments() {
                     )}
                   </div>
 
-                  {/* --- FOOTER DEL CARRITO --- */}
                   <div className="p-4 border-t bg-muted/20 space-y-4">
                     <div className="space-y-2">
                       {surchargeAmount > 0 ? (
@@ -685,7 +726,7 @@ export default function Payments() {
       <div className="relative">
         <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
         <Input
-          placeholder="Buscar por cliente o concepto..."
+          placeholder="Buscar por cliente, concepto o categoría..."
           className="pl-8"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
@@ -694,7 +735,7 @@ export default function Payments() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Historial de Transacciones</CardTitle>
+          <CardTitle>Historial de Movimientos</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
@@ -702,108 +743,169 @@ export default function Payments() {
               <TableRow>
                 <TableHead>Fecha</TableHead>
                 <TableHead>Tipo</TableHead>
-                <TableHead>Items</TableHead>
-                <TableHead>Método</TableHead>
+                <TableHead>Detalle</TableHead>
+                <TableHead>Categoría / Método</TableHead>
                 <TableHead className="text-right">Monto</TableHead>
                 <TableHead className="w-[100px] text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredPayments.length === 0 ? (
+              {filteredTransactions.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                     No hay movimientos registrados
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredPayments.map((payment) => (
-                  <TableRow key={payment.id}>
-                    <TableCell>
-                      {format(new Date(payment.date), "dd/MM/yyyy HH:mm", { locale: es })}
-                    </TableCell>
-                    <TableCell>
-                      {payment.orderId ? (
-                        <Badge variant="outline" className="bg-blue-50 text-blue-700 hover:bg-blue-50">
-                          <Wrench className="w-3 h-3 mr-1" /> Reparación
-                        </Badge>
-                      ) : (payment.items && payment.items.length > 0) ? (
-                        <Badge variant="outline" className="bg-green-50 text-green-700 hover:bg-green-50">
-                          <ShoppingBag className="w-3 h-3 mr-1" /> Venta
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline">General</Badge>
-                      )}
-                    </TableCell>
+                filteredTransactions.map((item) => {
+                  // --- LÓGICA DE BADGES (ETIQUETAS) ---
+                  let hasRepair = false;
+                  let hasProduct = false;
+                  // Si no es ni reparación ni producto (ej: venta manual o solo recargo), es "General"
+                  let isGeneral = false;
 
-                    <TableCell>
-                      <div className="flex flex-col gap-1">
-                        {payment.items && payment.items.length > 0 ? (
-                          <div className="flex flex-col">
-                            {payment.items.map((item: any, idx: number) => (
-                              <span key={idx} className="font-medium text-sm flex items-center gap-1">
-                                <span className="text-xs text-muted-foreground">{item.quantity}x</span>
-                                {item.name}
-                              </span>
-                            ))}
-                            {payment.notes && !payment.notes.startsWith("Venta de") && (
-                              <span className="text-xs text-muted-foreground italic mt-1">"{payment.notes}"</span>
+                  if (item.type === 'payment') {
+                    // Chequeamos si es reparación
+                    hasRepair = !!item.orderId || (item.items?.some((i: any) => i.type === 'repair') ?? false);
+                    // Chequeamos si es producto
+                    hasProduct = item.items?.some((i: any) => i.type === 'product') ?? false;
+
+                    // Si no tiene ninguno de los dos, marcamos como general
+                    if (!hasRepair && !hasProduct) {
+                      isGeneral = true;
+                    }
+                  }
+
+                  return (
+                    <TableRow key={`${item.type}-${item.id}`}>
+                      <TableCell>
+                        {format(new Date(item.date), "dd/MM/yyyy HH:mm", { locale: es })}
+                      </TableCell>
+
+                      <TableCell>
+                        {item.type === 'payment' ? (
+                          <div className="flex gap-1 flex-wrap">
+                            {hasRepair && (
+                              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                                <Wrench className="w-3 h-3 mr-1" /> Reparación
+                              </Badge>
+                            )}
+                            {hasProduct && (
+                              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                                <ShoppingBag className="w-3 h-3 mr-1" /> Venta
+                              </Badge>
+                            )}
+                            {isGeneral && (
+                              <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+                                <ArrowUpCircle className="w-3 h-3 mr-1" /> General
+                              </Badge>
                             )}
                           </div>
                         ) : (
-                          <span className="text-foreground font-medium">
-                            {payment.orderId ? "Pago de Reparación" : (payment.notes || "Movimiento general")}
-                          </span>
+                          <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
+                            <ArrowDownCircle className="w-3 h-3 mr-1" /> Gasto
+                          </Badge>
                         )}
-                      </div>
-                    </TableCell>
+                      </TableCell>
 
-                    <TableCell className="capitalize">{payment.method}</TableCell>
-                    <TableCell className="text-right font-medium">
-                      {formatMoney(payment.amount)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        {/* IMPRIMIR */}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => printTicket(payment, settings)}
-                          title="Imprimir Ticket"
-                        >
-                          <Printer className="h-4 w-4 text-muted-foreground hover:text-foreground" />
-                        </Button>
+                      <TableCell>
+                        {item.type === 'payment' ? (
+                          <div className="flex flex-col gap-1">
+                            {item.items && item.items.length > 0 ? (
+                              <div className="flex flex-col">
+                                {item.items.map((subItem: any, idx: number) => (
+                                  <span key={idx} className="font-medium text-sm flex items-center gap-1">
+                                    <span className="text-xs text-muted-foreground">{subItem.quantity}x</span>
+                                    {subItem.name}
+                                  </span>
+                                ))}
+                                {item.notes && !item.notes.startsWith("Venta de") && (
+                                  <span className="text-xs text-muted-foreground italic mt-1">"{item.notes}"</span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-foreground font-medium">
+                                {item.orderId ? "Pago de Reparación" : (item.notes || "Movimiento general")}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          // GASTO
+                          <span className="font-medium">{item.description}</span>
+                        )}
+                      </TableCell>
 
-                        {/* BORRAR (CON CONFIRMACIÓN) */}
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" title="Eliminar Transacción" className="text-destructive/70 hover:text-destructive hover:bg-destructive/10">
-                              <Trash2 className="h-4 w-4" />
+                      <TableCell className="capitalize">
+                        {item.type === 'payment' ? (
+                          <span className="text-sm">{item.method}</span>
+                        ) : (
+                          <Badge variant="secondary" className="font-normal">
+                            {item.category}
+                          </Badge>
+                        )}
+                      </TableCell>
+
+                      <TableCell className={cn("text-right font-medium", item.type === 'expense' ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400")}>
+                        {item.type === 'expense' ? "- " : "+ "}
+                        {formatMoney(item.amount)}
+                      </TableCell>
+
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {/* IMPRIMIR (SOLO PAGOS) */}
+                          {item.type === 'payment' && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => printTicket(item as Payment, settings)}
+                              title="Imprimir Ticket"
+                            >
+                              <Printer className="h-4 w-4 text-muted-foreground hover:text-foreground" />
                             </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>¿Eliminar esta transacción?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Esta acción eliminará el registro del pago y <strong>restará el monto de la caja</strong>.
-                                <br /><br />
-                                Si fue una venta de productos, el stock <strong>no se repondrá automáticamente</strong> (deberás ajustarlo manualmente si es necesario).
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                              <AlertDialogAction
-                                className="bg-destructive hover:bg-destructive/90 text-white"
-                                onClick={() => deletePaymentMutation.mutate(payment.id)}
-                              >
-                                {deletePaymentMutation.isPending ? "Eliminando..." : "Eliminar"}
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
+                          )}
+
+                          {/* BORRAR (CON CONFIRMACIÓN) */}
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="icon" title="Eliminar Transacción" className="text-destructive/70 hover:text-destructive hover:bg-destructive/10">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>¿Eliminar {item.type === 'payment' ? "este cobro" : "este gasto"}?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Esta acción eliminará el registro y <strong>{item.type === 'payment' ? "restará" : "sumará"} el monto a la caja</strong>.
+                                  {item.type === 'payment' && (
+                                    <>
+                                      <br /><br />
+                                      Si fue una venta de productos, el stock <strong>no se repondrá automáticamente</strong>.
+                                    </>
+                                  )}
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction
+                                  className="bg-destructive hover:bg-destructive/90 text-white"
+                                  onClick={() => {
+                                    if (item.type === 'payment') {
+                                      deletePaymentMutation.mutate(item.id);
+                                    } else {
+                                      deleteExpenseMutation.mutate(item.id);
+                                    }
+                                  }}
+                                >
+                                  {deletePaymentMutation.isPending || deleteExpenseMutation.isPending ? "Eliminando..." : "Eliminar"}
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>

@@ -1,4 +1,3 @@
-
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertProductSchema, type InsertProduct, type Product } from "@shared/schema";
@@ -34,6 +33,10 @@ export function ProductDialog({ open, onOpenChange, product }: ProductDialogProp
             cost: 0,
             price: 0,
             lowStockThreshold: 5,
+            brand: "",
+            model: "",
+            quality: "",
+            detail: "",
         },
     });
 
@@ -41,13 +44,17 @@ export function ProductDialog({ open, onOpenChange, product }: ProductDialogProp
         if (product) {
             form.reset({
                 name: product.name,
-                description: product.description,
-                sku: product.sku,
-                category: product.category,
-                quantity: product.quantity,
-                cost: product.cost,
-                price: product.price,
-                lowStockThreshold: product.lowStockThreshold,
+                description: product.description || "",
+                sku: product.sku || "",
+                category: product.category || "",
+                quantity: product.quantity ?? 0,
+                cost: Number(product.cost) ?? 0,
+                price: Number(product.price) ?? 0,
+                lowStockThreshold: product.lowStockThreshold ?? 5,
+                brand: product.brand || "",
+                model: product.model || "",
+                quality: product.quality || "",
+                detail: product.detail || "",
             });
         } else {
             form.reset({
@@ -59,20 +66,32 @@ export function ProductDialog({ open, onOpenChange, product }: ProductDialogProp
                 cost: 0,
                 price: 0,
                 lowStockThreshold: 5,
+                brand: "",
+                model: "",
+                quality: "",
+                detail: "",
             });
         }
     }, [product, form, open]);
 
     const mutation = useMutation({
         mutationFn: async (data: InsertProduct) => {
+            const payload = {
+                ...data,
+                quantity: Number(data.quantity),
+                cost: Number(data.cost),
+                price: Number(data.price),
+                lowStockThreshold: Number(data.lowStockThreshold),
+            };
+
             if (isEditing) {
-                return apiRequest("PATCH", `/api/products/${product.id}`, data);
+                return apiRequest("PATCH", `/api/products/${product.id}`, payload);
             } else {
-                return apiRequest("POST", "/api/products", data);
+                return apiRequest("POST", "/api/products", payload);
             }
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["products"] });
+            queryClient.invalidateQueries({ queryKey: ["/api/products"] });
             toast({
                 title: isEditing ? "Producto actualizado" : "Producto creado",
                 description: isEditing
@@ -96,7 +115,7 @@ export function ProductDialog({ open, onOpenChange, product }: ProductDialogProp
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+            <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>{isEditing ? "Editar Producto" : "Nuevo Producto"}</DialogTitle>
                 </DialogHeader>
@@ -104,6 +123,7 @@ export function ProductDialog({ open, onOpenChange, product }: ProductDialogProp
                 <Form {...form}>
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
+                            {/* Nombre - Ocupa todo el ancho */}
                             <FormField
                                 control={form.control}
                                 name="name"
@@ -111,13 +131,14 @@ export function ProductDialog({ open, onOpenChange, product }: ProductDialogProp
                                     <FormItem className="col-span-2">
                                         <FormLabel>Nombre del Producto</FormLabel>
                                         <FormControl>
-                                            <Input placeholder="Ej: Pantalla iPhone 11" {...field} />
+                                            <Input placeholder="Ej: Pantalla iPhone 11" {...field} value={field.value || ""} />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
                                 )}
                             />
 
+                            {/* SKU y Categoría */}
                             <FormField
                                 control={form.control}
                                 name="sku"
@@ -125,7 +146,7 @@ export function ProductDialog({ open, onOpenChange, product }: ProductDialogProp
                                     <FormItem>
                                         <FormLabel>SKU / Código</FormLabel>
                                         <FormControl>
-                                            <Input placeholder="IP11-PANT-ORIG" {...field} />
+                                            <Input placeholder="IP11-PANT-ORIG" {...field} value={field.value || ""} />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
@@ -139,13 +160,71 @@ export function ProductDialog({ open, onOpenChange, product }: ProductDialogProp
                                     <FormItem>
                                         <FormLabel>Categoría</FormLabel>
                                         <FormControl>
-                                            <Input placeholder="Repuestos" {...field} />
+                                            <Input placeholder="Repuestos" {...field} value={field.value || ""} />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
                                 )}
                             />
 
+                            {/* --- NUEVOS CAMPOS --- */}
+                            <FormField
+                                control={form.control}
+                                name="brand"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Marca</FormLabel>
+                                        <FormControl>
+                                            <Input placeholder="Ej: Apple" {...field} value={field.value || ""} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            <FormField
+                                control={form.control}
+                                name="model"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Modelo</FormLabel>
+                                        <FormControl>
+                                            <Input placeholder="Ej: iPhone 11" {...field} value={field.value || ""} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            <FormField
+                                control={form.control}
+                                name="quality"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Calidad</FormLabel>
+                                        <FormControl>
+                                            <Input placeholder="Ej: Original / OLED" {...field} value={field.value || ""} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            <FormField
+                                control={form.control}
+                                name="detail"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Detalle / Color</FormLabel>
+                                        <FormControl>
+                                            <Input placeholder="Ej: Negro" {...field} value={field.value || ""} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            {/* Stock y Alertas */}
                             <FormField
                                 control={form.control}
                                 name="quantity"
@@ -156,6 +235,8 @@ export function ProductDialog({ open, onOpenChange, product }: ProductDialogProp
                                             <Input
                                                 type="number"
                                                 {...field}
+                                                // CORRECCIÓN: Aseguramos que nunca sea null
+                                                value={field.value ?? 0}
                                                 onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
                                             />
                                         </FormControl>
@@ -174,6 +255,8 @@ export function ProductDialog({ open, onOpenChange, product }: ProductDialogProp
                                             <Input
                                                 type="number"
                                                 {...field}
+                                                // CORRECCIÓN: Aseguramos que nunca sea null
+                                                value={field.value ?? 0}
                                                 onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
                                             />
                                         </FormControl>
@@ -182,6 +265,7 @@ export function ProductDialog({ open, onOpenChange, product }: ProductDialogProp
                                 )}
                             />
 
+                            {/* Costos y Precios */}
                             <FormField
                                 control={form.control}
                                 name="cost"
@@ -193,6 +277,8 @@ export function ProductDialog({ open, onOpenChange, product }: ProductDialogProp
                                                 type="number"
                                                 step="0.01"
                                                 {...field}
+                                                // CORRECCIÓN: Aseguramos que nunca sea null
+                                                value={field.value ?? 0}
                                                 onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
                                             />
                                         </FormControl>
@@ -212,6 +298,8 @@ export function ProductDialog({ open, onOpenChange, product }: ProductDialogProp
                                                 type="number"
                                                 step="0.01"
                                                 {...field}
+                                                // CORRECCIÓN: Aseguramos que nunca sea null
+                                                value={field.value ?? 0}
                                                 onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
                                             />
                                         </FormControl>
@@ -220,14 +308,15 @@ export function ProductDialog({ open, onOpenChange, product }: ProductDialogProp
                                 )}
                             />
 
+                            {/* Descripción - Ocupa todo el ancho */}
                             <FormField
                                 control={form.control}
                                 name="description"
                                 render={({ field }) => (
                                     <FormItem className="col-span-2">
-                                        <FormLabel>Descripción</FormLabel>
+                                        <FormLabel>Descripción / Notas Adicionales</FormLabel>
                                         <FormControl>
-                                            <Textarea placeholder="Detalles adicionales..." {...field} />
+                                            <Textarea placeholder="Detalles adicionales..." {...field} value={field.value || ""} />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>

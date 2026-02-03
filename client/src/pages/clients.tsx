@@ -1,16 +1,19 @@
 import { listClients } from "@/lib/gsmApi";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
-import { Plus, Search, Users, Phone, Mail, ChevronRight } from "lucide-react";
+import { Link, useLocation } from "wouter"; // Agregamos useLocation
+import { Plus, Search, Users } from "lucide-react"; // Quitamos iconos que ya están dentro de la Card
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
+// Importamos tu nuevo componente (Asegúrate que la ruta coincida con donde creaste el archivo)
+import { ClientCard } from "@/components/cards/client-card";
 
 export default function Clients() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [, setLocation] = useLocation(); // Hook para navegar sin usar <Link>
 
   const { data: clients, isLoading, error } = useQuery({
     queryKey: ["clients"],
@@ -22,11 +25,22 @@ export default function Clients() {
       client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (client.phone ?? "").includes(searchQuery) ||
       (client.email ?? "").toLowerCase().includes(searchQuery.toLowerCase())
-
   });
+
+  // Manejador para ir al detalle del cliente
+  const handleCardClick = (id: number) => {
+    setLocation(`/clientes/${id}`);
+  };
+
+  // Manejador para el botón de editar (evita que se abra el detalle al clickear editar)
+  const handleEditClick = (e: any, id: number) => {
+    e.stopPropagation();
+    setLocation(`/clientes/${id}`);
+  };
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-semibold">Clientes</h1>
@@ -40,6 +54,7 @@ export default function Clients() {
         </Button>
       </div>
 
+      {/* Buscador */}
       <div className="relative max-w-md">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -50,14 +65,17 @@ export default function Clients() {
           data-testid="input-search-clients"
         />
       </div>
+
+      {/* Manejo de Errores */}
       {error && (
-        <div className="text-sm text-red-500">
+        <div className="text-sm text-red-500 bg-red-50 p-3 rounded border border-red-200">
           Error cargando clientes: {(error as any).message}
         </div>
       )}
 
+      {/* Estados de Carga y Lista */}
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {[1, 2, 3, 4, 5, 6].map((i) => (
             <Card key={i}>
               <CardContent className="p-6">
@@ -69,35 +87,15 @@ export default function Clients() {
           ))}
         </div>
       ) : filteredClients && filteredClients.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredClients.map((client) => (
-            <Link key={client.id} href={`/clientes/${client.id}`}>
-              <Card
-                className="hover-elevate cursor-pointer transition-shadow"
-                data-testid={`card-client-${client.id}`}
-              >
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-medium truncate mb-3">{client.name}</h3>
-                      <div className="space-y-2 text-sm text-muted-foreground">
-                        <div className="flex items-center gap-2">
-                          <Phone className="h-4 w-4 shrink-0" />
-                          <span className="truncate">{client.phone}</span>
-                        </div>
-                        {client.email && (
-                          <div className="flex items-center gap-2">
-                            <Mail className="h-4 w-4 shrink-0" />
-                            <span className="truncate">{client.email}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
+            // AQUÍ ESTÁ EL CAMBIO PRINCIPAL: Usamos ClientCard
+            <ClientCard
+              key={client.id}
+              client={client}
+              onClick={() => handleCardClick(client.id)}
+              onEdit={(e: any) => handleEditClick(e, client.id)}
+            />
           ))}
         </div>
       ) : (

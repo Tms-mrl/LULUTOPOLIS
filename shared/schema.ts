@@ -15,14 +15,12 @@ import { z } from "zod";
 // --------------------------------------------------------------------------
 // 1. CONSTANTES
 // --------------------------------------------------------------------------
-// --- CAMBIO: Se eliminó "diagnostico" para unificar con "en_curso" ---
 export const orderStatuses = ["recibido", "en_curso", "listo", "entregado"] as const;
 export type OrderStatus = typeof orderStatuses[number];
 
 export const paymentMethods = ["efectivo", "tarjeta", "transferencia"] as const;
 export type PaymentMethod = typeof paymentMethods[number];
 
-// Checklist dinámico
 export const intakeChecklistSchema = z.record(
   z.string(),
   z.enum(["yes", "no"]).nullable().optional()
@@ -92,7 +90,7 @@ export const repairOrders = pgTable("repair_orders", {
   intakeChecklist: jsonb("intake_checklist").default({}),
 });
 
-// --- PRODUCTS ---
+// --- PRODUCTS (MODIFICADO) ---
 export const products = pgTable("products", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: text("user_id").notNull(),
@@ -104,6 +102,12 @@ export const products = pgTable("products", {
   cost: decimal("cost", { precision: 10, scale: 2 }).notNull().default("0"),
   category: text("category").default("General"),
   lowStockThreshold: integer("low_stock_threshold").default(5),
+
+  // --- NUEVOS CAMPOS ---
+  brand: text("brand").default(""),     // MARCA
+  model: text("model").default(""),     // MODELO
+  quality: text("quality").default(""), // CALIDAD
+  detail: text("detail").default(""),   // DETALLE
 });
 
 // --- PAYMENTS ---
@@ -153,10 +157,7 @@ export const settings = pgTable("settings", {
   ticketFooter: text("ticket_footer").default("Gracias por su compra.\nConserve este ticket para garantía."),
   checklistOptions: text("checklist_options").array().default(["¿Carga?", "¿Enciende?", "¿Golpeado?", "¿Mojado?", "¿Abierto previamente?", "¿En garantía?", "¿Micro SD?", "¿Porta SIM?", "¿Tarjeta SIM?"]),
   printFormat: text("print_format").default("a4"),
-
-  // --- NUEVO CAMPO: Hora de Corte de Jornada (0-23) ---
   dayCutoffHour: integer("day_cutoff_hour").default(0),
-
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
@@ -240,7 +241,6 @@ export type InsertExpense = z.infer<typeof insertExpenseSchema>;
 export const insertSettingsSchema = createInsertSchema(settings, {
   cardSurcharge: z.coerce.number(),
   transferSurcharge: z.coerce.number(),
-  // Validación de hora (0-23)
   dayCutoffHour: z.coerce.number().min(0).max(23),
 }).pick({
   shopName: true,

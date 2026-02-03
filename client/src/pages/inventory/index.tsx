@@ -1,4 +1,3 @@
-
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -15,16 +14,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, FileDown, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Plus, Search, FileDown, Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -55,7 +46,9 @@ export default function InventoryPage() {
 
     const filteredProducts = products?.filter((product) =>
         product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product.sku.includes(searchTerm)
+        (product.sku || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (product.brand || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (product.model || "").toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     const handleCreate = () => {
@@ -127,7 +120,7 @@ export default function InventoryPage() {
                         <div className="relative w-64">
                             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                             <Input
-                                placeholder="Buscar por nombre o SKU..."
+                                placeholder="Buscar por nombre, SKU, marca..."
                                 className="pl-8"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -151,7 +144,9 @@ export default function InventoryPage() {
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>SKU</TableHead>
+                                    <TableHead>Marca / Modelo</TableHead> {/* NUEVA COLUMNA */}
                                     <TableHead>Producto</TableHead>
+                                    <TableHead>Calidad</TableHead> {/* NUEVA COLUMNA */}
                                     <TableHead>Categoría</TableHead>
                                     <TableHead className="text-right">Costo</TableHead>
                                     <TableHead className="text-right">Precio Venta</TableHead>
@@ -161,28 +156,53 @@ export default function InventoryPage() {
                             </TableHeader>
                             <TableBody>
                                 {filteredProducts?.map((product) => {
-                                    const isLowStock = product.quantity <= product.lowStockThreshold;
+                                    const isLowStock = product.quantity <= (product.lowStockThreshold || 0);
+
                                     return (
                                         <TableRow key={product.id}>
-                                            <TableCell className="font-mono text-xs">{product.sku}</TableCell>
+                                            <TableCell className="font-mono text-xs">
+                                                {product.sku || "-"}
+                                            </TableCell>
+
+                                            {/* --- COLUMNA MARCA / MODELO --- */}
+                                            <TableCell>
+                                                <div className="flex flex-col">
+                                                    <span className="font-medium text-sm">{product.brand || "-"}</span>
+                                                    <span className="text-xs text-muted-foreground">{product.model}</span>
+                                                </div>
+                                            </TableCell>
+
                                             <TableCell className="font-medium">
                                                 <div>{product.name}</div>
-                                                {product.description && (
+                                                {/* Mostramos Detalle y Descripción juntos */}
+                                                {(product.description || product.detail) && (
                                                     <div className="text-xs text-muted-foreground truncate max-w-[200px]">
-                                                        {product.description}
+                                                        {[product.detail, product.description].filter(Boolean).join(" • ")}
                                                     </div>
                                                 )}
                                             </TableCell>
+
+                                            {/* --- COLUMNA CALIDAD --- */}
+                                            <TableCell>
+                                                {product.quality ? (
+                                                    <Badge variant="outline" className="font-normal text-[10px]">
+                                                        {product.quality}
+                                                    </Badge>
+                                                ) : (
+                                                    <span className="text-muted-foreground text-xs">-</span>
+                                                )}
+                                            </TableCell>
+
                                             <TableCell>
                                                 <Badge variant="secondary" className="font-normal">
                                                     {product.category}
                                                 </Badge>
                                             </TableCell>
                                             <TableCell className="text-right">
-                                                ${product.cost.toFixed(2)}
+                                                ${Number(product.cost).toFixed(2)}
                                             </TableCell>
                                             <TableCell className="text-right font-medium">
-                                                ${product.price.toFixed(2)}
+                                                ${Number(product.price).toFixed(2)}
                                             </TableCell>
                                             <TableCell className="text-center">
                                                 <div className="flex items-center justify-center gap-1">

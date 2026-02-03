@@ -1,10 +1,8 @@
-
 import { useState, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Upload, FileUp, AlertCircle, CheckCircle2 } from "lucide-react";
+import { FileUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import readXlsxFile from "read-excel-file";
@@ -32,7 +30,7 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
         try {
             // 1. Parse Excel
             const rows = await readXlsxFile(file);
-            // Expected format: Name, SKU, Category, Cost, Price, Quantity
+            // Expected format: Name, SKU, Category, Cost, Price, Quantity, Brand, Model, Quality, Detail
             // Skip header row
             const dataRows = rows.slice(1);
 
@@ -43,7 +41,9 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
             for (let i = 0; i < total; i++) {
                 const row = dataRows[i];
                 // Simple mapping based on index. PROD: Map by column content/name if possible.
-                // Assuming: 0=Name, 1=SKU, 2=Category, 3=Cost, 4=Price, 5=Quantity
+                // 0=Name, 1=SKU, 2=Category, 3=Cost, 4=Price, 5=Quantity
+                // NEW: 6=Brand, 7=Model, 8=Quality, 9=Detail
+
                 const productData = {
                     name: String(row[0] || ""),
                     sku: String(row[1] || ""),
@@ -51,6 +51,13 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
                     cost: Number(row[3]) || 0,
                     price: Number(row[4]) || 0,
                     quantity: Number(row[5]) || 0,
+
+                    // --- NUEVOS CAMPOS ---
+                    brand: String(row[6] || ""),
+                    model: String(row[7] || ""),
+                    quality: String(row[8] || ""),
+                    detail: String(row[9] || ""),
+
                     description: "Importado desde Excel",
                     lowStockThreshold: 5,
                 };
@@ -71,7 +78,7 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
                 setProgress(Math.round(((i + 1) / total) * 100));
             }
 
-            await queryClient.invalidateQueries({ queryKey: ["products"] });
+            await queryClient.invalidateQueries({ queryKey: ["/api/products"] });
 
             toast({
                 title: "Importación Completada",
@@ -99,7 +106,11 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
                 <DialogHeader>
                     <DialogTitle>Importar Productos desde Excel</DialogTitle>
                     <DialogDescription>
-                        Sube un archivo .xlsx con las columnas: Nombre, SKU, Categoría, Costo, Precio, Cantidad.
+                        Sube un archivo .xlsx con las columnas en este orden exacto:
+                        <br />
+                        <span className="font-semibold text-xs mt-2 block bg-muted p-2 rounded border">
+                            Nombre | SKU | Categoría | Costo | Precio | Cantidad | Marca | Modelo | Calidad | Detalle
+                        </span>
                     </DialogDescription>
                 </DialogHeader>
 

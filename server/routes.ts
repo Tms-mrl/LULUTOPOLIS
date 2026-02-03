@@ -102,9 +102,28 @@ export async function registerRoutes(server: Server, app: Express) {
   app.get("/api/settings", async (req, res) => { try { const u = await getUserId(req); res.json((await storage.getSettings(u)) || {}); } catch (e) { res.status(500).json({ error: "Error" }); } });
   app.post("/api/settings", async (req, res) => { try { const p = insertSettingsSchema.safeParse(req.body); if (!p.success) return res.status(400).json({ error: p.error.errors }); const u = await getUserId(req); res.json(await storage.updateSettings(u, p.data)); } catch (e) { res.status(500).json({ error: "Error" }); } });
 
+  // --- PRODUCTOS ---
   app.get("/api/products", async (req, res) => { try { const u = await getUserId(req); const products = await storage.getProducts(u); res.json(products); } catch (e) { res.status(500).json({ error: "Error" }); } });
-  app.post("/api/products", async (req, res) => { try { const p = insertProductSchema.safeParse(req.body); if (!p.success) return res.status(400).json({ error: p.error.errors }); const u = await getUserId(req); res.status(201).json(await storage.createProduct({ ...p.data, userId: u, user_id: u } as any)); } catch (e) { res.status(500).json({ error: "Error" }); } });
-  app.patch("/api/products/:id", async (req, res) => { try { const u = await storage.updateProduct(req.params.id, req.body); if (!u) return res.status(404).json({ error: "Not found" }); res.json(u); } catch (e) { res.status(500).json({ error: "Error" }); } });
+
+  app.post("/api/products", async (req, res) => {
+    try {
+      // El insertProductSchema ya incluye los nuevos campos (brand, model, quality, detail)
+      const p = insertProductSchema.safeParse(req.body);
+      if (!p.success) return res.status(400).json({ error: p.error.errors });
+      const u = await getUserId(req);
+      res.status(201).json(await storage.createProduct({ ...p.data, userId: u, user_id: u } as any));
+    } catch (e) { res.status(500).json({ error: "Error" }); }
+  });
+
+  app.patch("/api/products/:id", async (req, res) => {
+    try {
+      // Aquí también se actualizarán los nuevos campos automáticamente
+      const u = await storage.updateProduct(req.params.id, req.body);
+      if (!u) return res.status(404).json({ error: "Not found" });
+      res.json(u);
+    } catch (e) { res.status(500).json({ error: "Error" }); }
+  });
+
   app.delete("/api/products/:id", async (req, res) => { try { const u = await getUserId(req); await storage.deleteProduct(req.params.id, u); res.sendStatus(204); } catch (e) { res.status(500).json({ error: "Error deleting product" }); } });
 
   // ---------------------------------------------------------

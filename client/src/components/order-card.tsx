@@ -3,7 +3,8 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "./status-badge";
 import { Smartphone, Calendar, User, AlertCircle } from "lucide-react";
-import type { RepairOrderWithDetails } from "@shared/schema";
+// Importamos el tipo OrderStatus para asegurar la coherencia
+import type { RepairOrderWithDetails, OrderStatus } from "@shared/schema";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -14,7 +15,7 @@ interface OrderCardProps {
 export function OrderCard({ order }: OrderCardProps) {
   return (
     <Link href={`/ordenes/${order.id}`}>
-      <Card 
+      <Card
         className="hover-elevate cursor-pointer transition-shadow"
         data-testid={`card-order-${order.id}`}
       >
@@ -33,7 +34,8 @@ export function OrderCard({ order }: OrderCardProps) {
                   Urgente
                 </Badge>
               )}
-              <StatusBadge status={order.status} />
+              {/* CORRECCIÓN: Casteamos el status a OrderStatus para satisfacer el tipado estricto */}
+              <StatusBadge status={order.status as OrderStatus} />
             </div>
           </div>
         </CardHeader>
@@ -42,14 +44,14 @@ export function OrderCard({ order }: OrderCardProps) {
             <User className="h-4 w-4" />
             <span>{order.client.name}</span>
           </div>
-          
+
           {order.device.imei && (
             <div className="text-sm">
               <span className="text-muted-foreground">IMEI: </span>
               <span className="font-mono">{order.device.imei}</span>
             </div>
           )}
-          
+
           {order.device.lockType && (
             <div className="text-sm">
               <span className="text-muted-foreground">Bloqueo: </span>
@@ -60,9 +62,9 @@ export function OrderCard({ order }: OrderCardProps) {
               </span>
             </div>
           )}
-          
+
           <p className="text-sm line-clamp-2">{order.problem}</p>
-          
+
           <div className="flex items-center justify-between pt-2 border-t text-xs text-muted-foreground">
             <div className="flex items-center gap-1">
               <Calendar className="h-3 w-3" />

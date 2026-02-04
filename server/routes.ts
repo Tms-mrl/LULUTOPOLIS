@@ -1,7 +1,16 @@
 import type { Express, Request } from "express";
 import { type Server } from "http";
 import { storage } from "./storage";
-import { insertRepairOrderSchema, insertClientSchema, insertDeviceSchema, insertPaymentSchema, insertSettingsSchema, insertProductSchema, insertExpenseSchema } from "@shared/schema";
+import {
+  insertRepairOrderSchema,
+  insertClientSchema,
+  insertDeviceSchema,
+  insertPaymentSchema,
+  insertSettingsSchema,
+  insertProductSchema,
+  insertExpenseSchema,
+  insertDailyCashSchema // Importamos el schema de validación
+} from "@shared/schema";
 import { createClient } from "@supabase/supabase-js";
 import multer from "multer";
 import nodemailer from "nodemailer";
@@ -36,7 +45,7 @@ export async function registerRoutes(server: Server, app: Express) {
     }
   };
 
-  // --- RUTAS ESTÁNDAR (Sin cambios) ---
+  // --- RUTAS ESTÁNDAR ---
   app.get("/api/clients", async (req, res) => { try { const u = await getUserId(req); res.json(await storage.getClients(u)); } catch (e) { res.status(500).json({ error: "Error" }); } });
   app.get("/api/clients/:id", async (req, res) => { const c = await storage.getClient(req.params.id); if (!c) return res.status(404).json({ error: "Not found" }); res.json(c); });
   app.post("/api/clients", async (req, res) => {
@@ -94,62 +103,78 @@ export async function registerRoutes(server: Server, app: Express) {
   });
 
   // =========================================================
-  // RUTA DASHBOARD CORREGIDA (Cierre de Caja Custom)
+  // GESTIÓN DE CAJA INICIAL (USANDO STORAGE)
+  // =========================================================
+
+  // 1. OBTENER CAJA INICIAL DE HOY
+  app.get("/api/cash/today", async (req, res) => {
+    try {
+      const u = await getUserId(req);
+      const settings = await storage.getSettings(u);
+
+      // Cálculo del "Día Lógico"
+      const cutoffHour = Number((settings as any)?.dayCutoffHour ?? 0);
+      const now = new Date();
+      if (now.getHours() < cutoffHour) {
+        now.setDate(now.getDate() - 1);
+      }
+      const dateStr = now.toISOString().split("T")[0]; // "2024-02-04"
+
+      // Usamos el método de storage
+      const result = await storage.getDailyCash(u, dateStr);
+
+      // Si no existe registro, devolvemos null para que el frontend sepa que debe pedirlo
+      res.json({ amount: result ? result.amount : null });
+    } catch (e) {
+      console.error("Error obteniendo caja:", e);
+      res.status(500).json({ error: "Error obteniendo caja inicial" });
+    }
+  });
+
+  // 2. GUARDAR/ACTUALIZAR CAJA INICIAL DE HOY
+  app.post("/api/cash", async (req, res) => {
+    try {
+      const u = await getUserId(req);
+      // Validamos el body con Zod
+      const parseResult = insertDailyCashSchema.pick({ amount: true }).safeParse(req.body);
+
+      if (!parseResult.success) {
+        return res.status(400).json({ error: parseResult.error.errors });
+      }
+
+      const settings = await storage.getSettings(u);
+
+      // Cálculo del "Día Lógico"
+      const cutoffHour = Number((settings as any)?.dayCutoffHour ?? 0);
+      const now = new Date();
+      if (now.getHours() < cutoffHour) {
+        now.setDate(now.getDate() - 1);
+      }
+      const dateStr = now.toISOString().split("T")[0];
+
+      // Usamos el método de storage
+      const result = await storage.upsertDailyCash(u, {
+        date: dateStr,
+        amount: parseResult.data.amount
+      });
+
+      res.json(result);
+    } catch (e) {
+      console.error("Error guardando caja:", e);
+      res.status(500).json({ error: "Error guardando caja" });
+    }
+  });
+  // =========================================================
+
+  // =========================================================
+  // RUTA DASHBOARD
   // =========================================================
   app.get("/api/stats", async (req, res) => {
     try {
       const userId = await getUserId(req);
-
-      // 1. Obtenemos configuración
-      const settings = await storage.getSettings(userId);
-
-      // 2. Leemos 'dayCutoffHour'. 
-      // Usamos "as any" para evitar el error de TypeScript si el tipo no está actualizado.
-      // Si no existe, usamos 0 (medianoche) como default.
-      const cutoffHour = Number((settings as any)?.dayCutoffHour ?? 0);
-
-      // 3. Cálculo del Inicio del Turno
-      const now = new Date();
-
-      // Creamos una fecha para el "cierre de hoy" a la hora configurada
-      let startDate = new Date(now);
-      startDate.setHours(cutoffHour, 0, 0, 0); // (Hora, Minuto 0, Segundo 0, Ms 0)
-
-      // LÓGICA CLAVE: 
-      // Si "ahora" es antes de la hora de corte de hoy...
-      // Ej: Cierro a las 21hs, y son las 15hs.
-      // Significa que todavía estoy en el turno que empezó AYER a las 21hs.
-      if (now < startDate) {
-        startDate.setDate(startDate.getDate() - 1);
-      }
-
-      // 4. Obtenemos TODOS los datos
-      const allPayments = await storage.getPaymentsWithOrders(userId);
-      const allExpenses = await storage.getExpenses(userId);
-      const allOrders = await storage.getOrdersWithDetails(userId);
-
-      // 5. Filtramos usando startDate
-      const totalIncome = allPayments
-        .filter(p => new Date(p.date) >= startDate)
-        .reduce((sum, p) => sum + Number(p.amount), 0);
-
-      const totalExpenses = allExpenses
-        .filter(e => new Date(e.date) >= startDate)
-        .reduce((sum, e) => sum + Number(e.amount), 0);
-
-      // 6. Contamos órdenes activas (siempre es el total actual, sin importar fecha)
-      const activeOrdersCount = allOrders.filter(o =>
-        o.status !== "entregado" && o.status !== "cancelado"
-      ).length;
-
-      res.json({
-        activeOrdersCount,
-        totalIncome,
-        totalExpenses,
-        netBalance: totalIncome - totalExpenses,
-        // debugStart: startDate.toLocaleString() // Descomenta esto si quieres ver en la consola del navegador qué fecha calculó
-      });
-
+      // Delegamos el cálculo pesado al storage (que ya tiene la lógica de fechas)
+      const stats = await storage.getStats(userId);
+      res.json(stats);
     } catch (e) {
       console.error("Error en stats:", e);
       res.status(500).json({ error: "Error calculando estadísticas" });

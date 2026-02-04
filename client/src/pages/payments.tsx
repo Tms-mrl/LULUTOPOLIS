@@ -27,17 +27,17 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { 
-  Plus, 
-  Search, 
-  ShoppingBag, 
-  Wrench, 
-  Trash2, 
-  ShoppingCart, 
-  DollarSign, 
-  TrendingDown, 
-  Printer, 
-  ArrowUpCircle, 
+import {
+  Plus,
+  Search,
+  ShoppingBag,
+  Wrench,
+  Trash2,
+  ShoppingCart,
+  DollarSign,
+  TrendingDown,
+  Printer,
+  ArrowUpCircle,
   ArrowDownCircle,
   Wallet,
   TrendingUp,
@@ -307,11 +307,29 @@ export default function Payments() {
     }).format(amount);
   };
 
+  // ===========================================================================
+  // LÓGICA DE FILTRADO DE FECHAS (Cierre de Caja)
+  // ===========================================================================
+  const cutoffHour = Number((settings as any)?.dayCutoffHour ?? 0);
+  const now = new Date();
+  let startOfShift = new Date(now);
+  startOfShift.setHours(cutoffHour, 0, 0, 0);
+
+  // Si son las 15hs y cierro a las 21hs, mi turno empezó AYER a las 21hs.
+  if (now < startOfShift) {
+    startOfShift.setDate(startOfShift.getDate() - 1);
+  }
+  // ===========================================================================
+
   // --- COMBINAR Y FILTRAR TRANSACCIONES ---
   const allTransactions: Transaction[] = [
     ...payments.map(p => ({ ...p, type: 'payment' as const })),
     ...expenses.map(e => ({ ...e, type: 'expense' as const }))
-  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  ]
+    // Primero filtramos por fecha (SOLO lo del turno actual)
+    .filter(t => new Date(t.date) >= startOfShift)
+    // Luego ordenamos por fecha descendente
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   // --- CALCULAR TOTALES FILTRADOS O GLOBALES ---
   const filteredTransactions = allTransactions.filter((item) => {
@@ -342,7 +360,7 @@ export default function Payments() {
 
   return (
     <div className="min-h-screen bg-background/50 pb-20 space-y-8">
-      
+
       {/* --- HEADER STICKY "GLASS" --- */}
       <div className="sticky top-0 z-30 border-b border-border/40 bg-background/80 backdrop-blur-md px-6 py-4 transition-all">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 max-w-7xl mx-auto w-full">
@@ -355,7 +373,7 @@ export default function Payments() {
               Gestiona ingresos, gastos y el flujo de caja diario.
             </p>
           </div>
-          
+
           <div className="flex items-center gap-3 w-full sm:w-auto">
             {/* BOTÓN REGISTRAR GASTO */}
             <Dialog open={isOpenExpense} onOpenChange={setIsOpenExpense}>
@@ -419,7 +437,7 @@ export default function Payments() {
             {/* BOTÓN NUEVA VENTA (ESTILO PRIMARY GLASS) */}
             <Dialog open={isOpenSale} onOpenChange={setIsOpenSale}>
               <DialogTrigger asChild>
-                <Button 
+                <Button
                   variant="outline"
                   className="bg-primary/10 text-primary hover:bg-primary/20 border-primary/20 hover:border-primary/40 shadow-sm backdrop-blur-sm transition-all active:scale-95"
                 >
@@ -766,7 +784,7 @@ export default function Payments() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 w-full space-y-8">
-        
+
         {/* --- KPI CARDS (RESUMEN FINANCIERO) --- */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card className="border-border/50 bg-gradient-to-br from-card via-card/95 to-emerald-500/10 shadow-sm relative overflow-hidden">
@@ -775,7 +793,7 @@ export default function Payments() {
             </div>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <ArrowUpCircle className="h-4 w-4 text-emerald-500" /> Ingresos Totales
+                <ArrowUpCircle className="h-4 w-4 text-emerald-500" /> Ingresos (Hoy)
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -791,7 +809,7 @@ export default function Payments() {
             </div>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <ArrowDownCircle className="h-4 w-4 text-red-500" /> Gastos Totales
+                <ArrowDownCircle className="h-4 w-4 text-red-500" /> Gastos (Hoy)
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -807,7 +825,7 @@ export default function Payments() {
             </div>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <CreditCard className="h-4 w-4 text-blue-500" /> Balance Neto
+                <CreditCard className="h-4 w-4 text-blue-500" /> Balance Neto (Hoy)
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -821,7 +839,7 @@ export default function Payments() {
         {/* --- TABLA DE MOVIMIENTOS --- */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Historial de Movimientos</h2>
+            <h2 className="text-lg font-semibold">Movimientos del Turno Actual</h2>
             <div className="relative w-72">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
@@ -852,7 +870,7 @@ export default function Payments() {
                       <TableCell colSpan={6} className="text-center py-16 text-muted-foreground">
                         <div className="flex flex-col items-center gap-2">
                           <Search className="h-8 w-8 opacity-20" />
-                          <p>No se encontraron movimientos</p>
+                          <p>No se encontraron movimientos hoy</p>
                         </div>
                       </TableCell>
                     </TableRow>

@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query"; // Agregado useMutation
 import {
   TrendingUp,
   TrendingDown,
@@ -9,7 +9,9 @@ import {
   Calendar,
   BarChart3,
   Smartphone,
-  PieChart
+  PieChart,
+  Printer, // Agregado
+  Trash2   // Agregado
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -48,6 +50,22 @@ import {
 } from "recharts";
 import { cn } from "@/lib/utils";
 
+// --- IMPORTS NUEVOS PARA ACCIONES ---
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { printTicket } from "@/lib/printer";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+
 type Transaction = {
   id: string;
   date: Date; // Fecha real
@@ -70,6 +88,7 @@ type MonthlySummary = {
 
 export default function Reports() {
   const [filterPeriod, setFilterPeriod] = useState<"all" | "month" | "today">("today");
+  const { toast } = useToast(); // Hook para notificaciones
 
   // --- QUERIES ---
   const { data: settings } = useQuery<Settings>({
@@ -87,6 +106,46 @@ export default function Reports() {
   const { data: orders = [], isLoading: loadingOrders } = useQuery<RepairOrderWithDetails[]>({
     queryKey: ["/api/orders"],
   });
+
+  // --- MUTATIONS (ELIMINAR) ---
+  const deletePaymentMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/payments/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
+      toast({ title: "Transacción eliminada", description: "Se ha descontado de la caja." });
+    },
+    onError: () => {
+      toast({ title: "Error al eliminar", variant: "destructive" });
+    },
+  });
+
+  const deleteExpenseMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/expenses/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
+      toast({ title: "Gasto eliminado", description: "El monto ha vuelto a la caja." });
+    },
+    onError: () => {
+      toast({ title: "Error al eliminar", variant: "destructive" });
+    },
+  });
+
+  // --- HELPER: IMPRIMIR ---
+  const handlePrint = (transactionId: string) => {
+    // Buscamos el pago completo en el array original 'payments'
+    const payment = payments.find(p => p.id === transactionId);
+    if (payment) {
+      printTicket(payment, settings);
+    } else {
+      toast({ title: "Error", description: "No se encontró la información del ticket", variant: "destructive" });
+    }
+  };
 
   // --- HELPER: CALCULAR FECHA LÓGICA ---
   const getLogicalDate = (date: Date, cutoffHour: number = 0): Date => {
@@ -249,7 +308,7 @@ export default function Reports() {
 
   return (
     <div className="min-h-screen bg-background/50 pb-20 space-y-8">
-      
+
       {/* --- HEADER STICKY "GLASS" --- */}
       <div className="sticky top-0 z-30 border-b border-border/40 bg-background/80 backdrop-blur-md px-6 py-4 transition-all">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 max-w-7xl mx-auto w-full">
@@ -262,7 +321,7 @@ export default function Reports() {
               Análisis financiero y métricas de rendimiento.
             </p>
           </div>
-          
+
           <div className="flex items-center gap-3 w-full sm:w-auto">
             <Select value={filterPeriod} onValueChange={(v: any) => setFilterPeriod(v)}>
               <SelectTrigger className="w-[180px] bg-background/50 backdrop-blur-sm border-border/50">
@@ -277,11 +336,11 @@ export default function Reports() {
             </Select>
 
             {/* BOTÓN CSV (Estilo Esmeralda Glass) */}
-            <Button 
-                variant="outline" 
-                onClick={handleExportCSV} 
-                disabled={transactions.length === 0}
-                className="bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border-emerald-500/20 hover:border-emerald-500/40 shadow-sm backdrop-blur-sm transition-all"
+            <Button
+              variant="outline"
+              onClick={handleExportCSV}
+              disabled={transactions.length === 0}
+              className="bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border-emerald-500/20 hover:border-emerald-500/40 shadow-sm backdrop-blur-sm transition-all"
             >
               <Download className="h-4 w-4 mr-2" />
               CSV
@@ -291,21 +350,21 @@ export default function Reports() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 w-full space-y-8">
-        
+
         {/* TABS PRINCIPALES */}
         <Tabs defaultValue="financial" className="w-full space-y-8">
-          
+
           {/* --- LISTA DE PESTAÑAS FLOTANTES --- */}
           <div className="flex justify-center">
             <TabsList className="h-auto p-1 bg-muted/50 backdrop-blur-sm border border-border/50 rounded-full inline-flex flex-wrap justify-center gap-1">
-              <TabsTrigger 
-                value="financial" 
+              <TabsTrigger
+                value="financial"
                 className={`${tabTriggerBase} data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:border-primary/20`}
               >
                 <FileText className="h-4 w-4" /> Resumen Financiero
               </TabsTrigger>
-              <TabsTrigger 
-                value="metrics" 
+              <TabsTrigger
+                value="metrics"
                 className={`${tabTriggerBase} data-[state=active]:bg-blue-500/10 data-[state=active]:text-blue-500 data-[state=active]:border-blue-500/20`}
               >
                 <PieChart className="h-4 w-4" /> Métricas y Gráficos
@@ -315,7 +374,7 @@ export default function Reports() {
 
           {/* --- PESTAÑA 1: FINANCIERO (KPIs + TABLA) --- */}
           <TabsContent value="financial" className="space-y-6 animate-in fade-in-50 slide-in-from-bottom-2 duration-300">
-            
+
             {/* KPI CARDS (RESUMEN) */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {isLoading ? (
@@ -384,7 +443,7 @@ export default function Reports() {
                   {filterPeriod === "all" ? "Historial Mensual" : "Detalle de Movimientos"}
                 </CardTitle>
                 <CardDescription>
-                    {filterPeriod === "all" ? "Resumen consolidado mes a mes." : "Listado detallado de ingresos y egresos del periodo seleccionado."}
+                  {filterPeriod === "all" ? "Resumen consolidado mes a mes." : "Listado detallado de ingresos y egresos del periodo seleccionado."}
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-0">
@@ -407,13 +466,15 @@ export default function Reports() {
                             <TableHead>Descripción</TableHead>
                             <TableHead>Método</TableHead>
                             <TableHead className="text-right w-[150px]">Monto</TableHead>
+                            {/* NUEVA COLUMNA ACCIONES */}
+                            <TableHead className="text-right w-[100px]">Acciones</TableHead>
                           </>
                         )}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {isLoading ? (
-                        <TableRow><TableCell colSpan={6} className="text-center h-24">Cargando...</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={7} className="text-center h-24">Cargando...</TableCell></TableRow>
                       ) : (
                         <>
                           {filterPeriod === "all" ? (
@@ -433,13 +494,12 @@ export default function Reports() {
                             )
                           ) : (
                             filteredData.length === 0 ? (
-                              <TableRow><TableCell colSpan={6} className="text-center h-24 text-muted-foreground">Sin movimientos en este periodo.</TableCell></TableRow>
+                              <TableRow><TableCell colSpan={7} className="text-center h-24 text-muted-foreground">Sin movimientos en este periodo.</TableCell></TableRow>
                             ) : (
                               filteredData.map((t) => (
                                 <TableRow key={t.id} className="hover:bg-muted/30 transition-colors">
                                   <TableCell className="font-mono text-xs text-muted-foreground">
                                     {format(t.date, "dd/MM/yyyy HH:mm")}
-                                    {/* Indicador visual si la fecha lógica es diferente */}
                                     {t.date.getDate() !== t.logicalDate.getDate() && (
                                       <span className="block text-[10px] opacity-70">
                                         (Contable: {format(t.logicalDate, "dd/MM")})
@@ -447,18 +507,18 @@ export default function Reports() {
                                     )}
                                   </TableCell>
                                   <TableCell>
-                                    <Badge variant={t.type === "income" ? "outline" : "outline"} 
-                                        className={cn("text-[10px] h-5 px-1.5", 
-                                            t.type === "income" 
-                                            ? "bg-emerald-500/10 text-emerald-600 border-emerald-200 dark:border-emerald-800" 
-                                            : "bg-red-500/10 text-red-600 border-red-200 dark:border-red-800"
-                                        )}>
+                                    <Badge variant="outline"
+                                      className={cn("text-[10px] h-5 px-1.5",
+                                        t.type === "income"
+                                          ? "bg-emerald-500/10 text-emerald-600 border-emerald-200 dark:border-emerald-800"
+                                          : "bg-red-500/10 text-red-600 border-red-200 dark:border-red-800"
+                                      )}>
                                       {t.type === "income" ? "Ingreso" : "Gasto"}
                                     </Badge>
                                   </TableCell>
                                   <TableCell>
                                     <Badge variant="secondary" className="font-normal text-xs bg-muted/50">
-                                        {t.category}
+                                      {t.category}
                                     </Badge>
                                   </TableCell>
                                   <TableCell className="max-w-[300px] truncate text-sm" title={t.description}>{t.description}</TableCell>
@@ -466,6 +526,62 @@ export default function Reports() {
                                   <TableCell className={`text-right font-bold tabular-nums ${t.type === "income" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
                                     {t.type === "income" ? "+" : "-"} {formatMoney(t.amount)}
                                   </TableCell>
+
+                                  {/* --- NUEVA CELDA: BOTONES ACCIÓN --- */}
+                                  <TableCell className="text-right">
+                                    <div className="flex items-center justify-end gap-1">
+                                      {/* IMPRIMIR (Solo Ingresos) */}
+                                      {t.type === "income" && (
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                          onClick={() => handlePrint(t.id)}
+                                          title="Imprimir Ticket"
+                                        >
+                                          <Printer className="h-4 w-4" />
+                                        </Button>
+                                      )}
+
+                                      {/* ELIMINAR (Con confirmación) */}
+                                      <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                          <Button variant="ghost" size="icon" title="Eliminar" className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10">
+                                            <Trash2 className="h-4 w-4" />
+                                          </Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                          <AlertDialogHeader>
+                                            <AlertDialogTitle>¿Eliminar este registro?</AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                              Se eliminará del historial y <strong>{t.type === "income" ? "se restará" : "se sumará"} el monto a la caja</strong>.
+                                              <br />
+                                              <span className="text-xs text-muted-foreground mt-1 block">
+                                                Esta acción no se puede deshacer.
+                                              </span>
+                                            </AlertDialogDescription>
+                                          </AlertDialogHeader>
+                                          <AlertDialogFooter>
+                                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                            <AlertDialogAction
+                                              className="bg-destructive hover:bg-destructive/90 text-white"
+                                              onClick={() => {
+                                                if (t.type === "income") {
+                                                  deletePaymentMutation.mutate(t.id);
+                                                } else {
+                                                  deleteExpenseMutation.mutate(t.id);
+                                                }
+                                              }}
+                                            >
+                                              Eliminar
+                                            </AlertDialogAction>
+                                          </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                      </AlertDialog>
+                                    </div>
+                                  </TableCell>
+                                  {/* ----------------------------------- */}
+
                                 </TableRow>
                               ))
                             )
@@ -498,7 +614,7 @@ export default function Reports() {
                       <BarChart data={chartsData}>
                         <CartesianGrid strokeDasharray="3 3" opacity={0.2} vertical={false} />
                         <XAxis dataKey="label" fontSize={12} tickLine={false} axisLine={false} />
-                        <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value/1000}k`} />
+                        <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value / 1000}k`} />
                         <Tooltip
                           cursor={{ fill: 'var(--muted)', opacity: 0.2 }}
                           formatter={(value: number) => formatMoney(value)}

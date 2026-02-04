@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
   ClipboardList,
@@ -9,24 +10,41 @@ import {
   Wallet,
   TrendingUp,
   Inbox,
-  LayoutDashboard
+  LayoutDashboard,
+  Save
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { RepairOrderWithDetails, Payment } from "@shared/schema";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import type { RepairOrderWithDetails, Payment, Expense, Settings } from "@shared/schema";
 import { OrderCard } from "@/components/cards/order-card";
 import { cn } from "@/lib/utils";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Dashboard() {
+  const { toast } = useToast();
+
+  // Estados para el Pop-up de Caja
+  const [isCashDialogOpen, setIsCashDialogOpen] = useState(false);
+  const [initialCashInput, setInitialCashInput] = useState("");
+
+  // 1. DATA FETCHING
+  // FIX: Agregamos el tipo genérico <{...}> para que TS sepa qué propiedades tiene 'stats'
   const { data: stats, isLoading: statsLoading } = useQuery<{
     activeOrders: number;
     pendingDiagnosis: number;
     readyForPickup: number;
-    cashInBox: number;
-    dailyIncome: number;
-    dailyExpenses: number;
-    netBalance: number;
   }>({
     queryKey: ["/api/stats"],
     refetchInterval: 5000,
@@ -41,6 +59,63 @@ export default function Dashboard() {
     queryKey: ["/api/payments"],
     refetchInterval: 5000,
   });
+
+  const { data: expenses = [] } = useQuery<Expense[]>({
+    queryKey: ["/api/expenses"],
+    refetchInterval: 5000,
+  });
+
+  const { data: settings } = useQuery<Settings>({
+    queryKey: ["/api/settings"],
+  });
+
+  // CONSULTA DE CAJA INICIAL DEL DÍA
+  const { data: cashData, isLoading: cashLoading } = useQuery<{ amount: number | null }>({
+    queryKey: ["/api/cash/today"],
+  });
+
+  // 2. EFECTO: ABRIR POP-UP AUTOMÁTICAMENTE
+  useEffect(() => {
+    if (!cashLoading && cashData && cashData.amount === null) {
+      setIsCashDialogOpen(true);
+      setInitialCashInput("");
+    }
+  }, [cashData, cashLoading]);
+
+  // 3. MUTATION: GUARDAR CAJA
+  const saveCashMutation = useMutation({
+    mutationFn: async (amount: number) => {
+      await apiRequest("POST", "/api/cash", { amount });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cash/today"] });
+      toast({ title: "Caja inicial establecida", description: "Se ha abierto la caja del día." });
+      setIsCashDialogOpen(false);
+    },
+    onError: () => {
+      toast({ title: "Error al guardar", variant: "destructive" });
+    }
+  });
+
+  // 4. LÓGICA DE FECHAS Y TOTALES
+  const cutoffHour = Number((settings as any)?.dayCutoffHour ?? 0);
+  const now = new Date();
+  let startOfShift = new Date(now);
+  startOfShift.setHours(cutoffHour, 0, 0, 0);
+
+  if (now < startOfShift) {
+    startOfShift.setDate(startOfShift.getDate() - 1);
+  }
+
+  const todayPayments = payments.filter(p => new Date(p.date) >= startOfShift);
+  const todayExpenses = expenses.filter(e => new Date(e.date) >= startOfShift);
+
+  const dailyIncome = todayPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+  const dailyExpenses = todayExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
+  const dailyNet = dailyIncome - dailyExpenses;
+
+  const initialCash = Number(cashData?.amount ?? 0);
+  const currentCashInBox = initialCash + dailyNet;
 
   // Lógica de Actividad Reciente
   const recentActivity = orders
@@ -69,8 +144,8 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background/50 pb-20 space-y-8">
-      
-      {/* --- HEADER STICKY "GLASS" --- */}
+
+      {/* --- HEADER --- */}
       <div className="sticky top-0 z-30 border-b border-border/40 bg-background/80 backdrop-blur-md px-6 py-4 transition-all">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 max-w-7xl mx-auto w-full">
           <div className="flex flex-col gap-1 w-full sm:w-auto">
@@ -82,13 +157,12 @@ export default function Dashboard() {
               Resumen financiero y operativo en tiempo real.
             </p>
           </div>
-          
+
           <div className="flex items-center gap-3 w-full sm:w-auto">
-            {/* BOTÓN NUEVA ORDEN (Estilo Primary Glass) */}
-            <Button 
-                asChild 
-                variant="outline"
-                className="bg-primary/10 text-primary hover:bg-primary/20 border-primary/20 hover:border-primary/40 shadow-sm backdrop-blur-sm transition-all active:scale-95 flex-1 sm:flex-none"
+            <Button
+              asChild
+              variant="outline"
+              className="bg-primary/10 text-primary hover:bg-primary/20 border-primary/20 hover:border-primary/40 shadow-sm backdrop-blur-sm transition-all active:scale-95 flex-1 sm:flex-none"
             >
               <Link href="/ordenes/nueva">
                 <Plus className="h-4 w-4 mr-2" />
@@ -101,37 +175,47 @@ export default function Dashboard() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 w-full space-y-8">
 
-        {/* --- SECCIÓN FINANCIERA (KPIs) --- */}
+        {/* --- KPI CARDS --- */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {statsLoading ? (
+          {statsLoading || cashLoading ? (
             [1, 2, 3, 4].map((i) => (
-              <Card key={i} className="h-32">
-                <CardContent className="p-6 flex flex-col justify-center h-full">
-                  <Skeleton className="h-4 w-24 mb-2" />
-                  <Skeleton className="h-8 w-32" />
-                </CardContent>
-              </Card>
+              <Card key={i} className="h-32"><Skeleton className="h-full w-full" /></Card>
             ))
           ) : (
             <>
-              {/* Caja (Azul) */}
+              {/* TARJETA 1: CAJA ACTUAL (Con botón editar) */}
               <Card className="border-border/50 bg-gradient-to-br from-card via-card/95 to-blue-500/10 shadow-sm relative overflow-hidden group hover:border-blue-500/20 transition-all">
                 <div className="absolute right-0 top-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
                   <Wallet className="w-24 h-24 text-blue-500" />
                 </div>
-                <CardHeader className="pb-2">
+                <CardHeader className="pb-2 flex flex-row items-center justify-between">
                   <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                     <Wallet className="h-4 w-4 text-blue-500" /> Caja Actual (Efectivo)
                   </CardTitle>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-muted-foreground hover:text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/30"
+                    onClick={() => {
+                      setInitialCashInput(String(initialCash));
+                      setIsCashDialogOpen(true);
+                    }}
+                    title="Ajustar Caja Inicial"
+                  >
+
+                  </Button>
                 </CardHeader>
                 <CardContent>
                   <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
-                    {formatMoney(stats?.cashInBox ?? 0)}
+                    {formatMoney(currentCashInBox)}
                   </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Inicio día: {formatMoney(initialCash)}
+                  </p>
                 </CardContent>
               </Card>
 
-              {/* Ingresos (Verde) */}
+              {/* Ingresos */}
               <Card className="border-border/50 bg-gradient-to-br from-card via-card/95 to-emerald-500/10 shadow-sm relative overflow-hidden group hover:border-emerald-500/20 transition-all">
                 <div className="absolute right-0 top-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
                   <TrendingUp className="w-24 h-24 text-emerald-500" />
@@ -143,12 +227,12 @@ export default function Dashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">
-                    {formatMoney(stats?.dailyIncome ?? 0)}
+                    {formatMoney(dailyIncome)}
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Gastos (Rojo) */}
+              {/* Gastos */}
               <Card className="border-border/50 bg-gradient-to-br from-card via-card/95 to-red-500/10 shadow-sm relative overflow-hidden group hover:border-red-500/20 transition-all">
                 <div className="absolute right-0 top-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
                   <TrendingDown className="w-24 h-24 text-red-500" />
@@ -160,30 +244,67 @@ export default function Dashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-3xl font-bold text-red-600 dark:text-red-400">
-                    {formatMoney(stats?.dailyExpenses ?? 0)}
+                    {formatMoney(dailyExpenses)}
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Balance (Indigo/Violeta) */}
+              {/* Balance Neto */}
               <Card className="border-border/50 bg-gradient-to-br from-card via-card/95 to-indigo-500/10 shadow-sm relative overflow-hidden group hover:border-indigo-500/20 transition-all">
                 <div className="absolute right-0 top-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
                   <DollarSign className="w-24 h-24 text-indigo-500" />
                 </div>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                    <DollarSign className="h-4 w-4 text-indigo-500" /> Balance Neto (Hoy)
+                    <DollarSign className="h-4 w-4 text-indigo-500" /> Neto (Hoy)
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className={cn("text-3xl font-bold", (stats?.netBalance ?? 0) >= 0 ? "text-indigo-600 dark:text-indigo-400" : "text-red-500")}>
-                    {formatMoney(stats?.netBalance ?? 0)}
+                  <div className={cn("text-3xl font-bold", dailyNet >= 0 ? "text-indigo-600 dark:text-indigo-400" : "text-red-500")}>
+                    {formatMoney(dailyNet)}
                   </div>
                 </CardContent>
               </Card>
             </>
           )}
         </div>
+
+        {/* --- POP-UP DE CAJA INICIAL --- */}
+        <Dialog open={isCashDialogOpen} onOpenChange={setIsCashDialogOpen}>
+          <DialogContent className="sm:max-w-[400px]">
+            <DialogHeader>
+              <DialogTitle>Apertura de Caja</DialogTitle>
+              <DialogDescription>
+                Por favor, ingresa el dinero en efectivo con el que inicias el turno hoy.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="amount" className="text-right font-medium">
+                  Monto
+                </Label>
+                <div className="col-span-3 relative">
+                  <DollarSign className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="amount"
+                    type="number"
+                    value={initialCashInput}
+                    onChange={(e) => setInitialCashInput(e.target.value)}
+                    className="pl-9"
+                    placeholder="0.00"
+                    autoFocus
+                  />
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button onClick={() => saveCashMutation.mutate(parseFloat(initialCashInput) || 0)} className="w-full">
+                <Save className="w-4 h-4 mr-2" />
+                {saveCashMutation.isPending ? "Guardando..." : "Abrir Caja"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* --- ACTIVIDAD RECIENTE --- */}
         <div>
@@ -193,10 +314,10 @@ export default function Dashboard() {
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {recentActivity.map((order) => (
-              <OrderCard 
-                  key={order.id} 
-                  order={order} 
-                  paymentStatus={getPaymentStatus(order)} 
+              <OrderCard
+                key={order.id}
+                order={order}
+                paymentStatus={getPaymentStatus(order)}
               />
             ))}
             {recentActivity.length === 0 && (

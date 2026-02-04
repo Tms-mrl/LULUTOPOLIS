@@ -1,255 +1,15 @@
 import {
-  pgTable,
-  text,
-  serial,
-  integer,
-  boolean,
-  timestamp,
-  jsonb,
-  decimal,
-  uuid
-} from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod";
+  type User, type InsertUser,
+  type Client, type InsertClient,
+  type Device, type InsertDevice,
+  type RepairOrder, type InsertRepairOrder, type RepairOrderWithDetails,
+  type Product, type InsertProduct,
+  type Payment, type InsertPayment, type PaymentItem,
+  type Expense, type InsertExpense,
+  type Settings, type InsertSettings,
+  type DailyCash, type InsertDailyCash
+} from "@shared/schema";
 import { supabase } from "./supabase";
-
-// --------------------------------------------------------------------------
-// 1. CONSTANTES GLOBALES
-// --------------------------------------------------------------------------
-export const orderStatuses = ["recibido", "diagnostico", "en_curso", "listo", "entregado"] as const;
-export type OrderStatus = typeof orderStatuses[number];
-
-export const paymentMethods = ["efectivo", "tarjeta", "transferencia"] as const;
-export type PaymentMethod = typeof paymentMethods[number];
-
-// --------------------------------------------------------------------------
-// 2. DEFINICIÓN DE TABLAS (Drizzle)
-// --------------------------------------------------------------------------
-
-// --- USERS ---
-export const users = pgTable("users", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
-});
-
-// --- CLIENTS ---
-export const clients = pgTable("clients", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: text("user_id").notNull(),
-  name: text("name").notNull(),
-  dni: text("dni").default(""),
-  address: text("address").default(""),
-  phone: text("phone").default(""),
-  email: text("email").default(""),
-  whoPicksUp: text("who_picks_up").default(""),
-  notes: text("notes").default(""),
-});
-
-// --- DEVICES ---
-export const devices = pgTable("devices", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: text("user_id").notNull(),
-  clientId: text("client_id").notNull(),
-  brand: text("brand").notNull(),
-  model: text("model").notNull(),
-  imei: text("imei").default(""),
-  serialNumber: text("serial_number").default(""),
-  color: text("color").default(""),
-  condition: text("condition").default(""),
-  lockType: text("lock_type").default(""),
-  lockValue: text("lock_value").default(""),
-});
-
-// --- REPAIR ORDERS ---
-export const repairOrders = pgTable("repair_orders", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: text("user_id").notNull(),
-  clientId: text("client_id").notNull(),
-  deviceId: text("device_id").notNull(),
-  status: text("status").notNull().default("recibido"),
-
-  problem: text("problem").notNull(),
-  diagnosis: text("diagnosis").default(""),
-  solution: text("solution").default(""),
-  technicianName: text("technician_name").default(""),
-
-  estimatedCost: decimal("estimated_cost", { precision: 10, scale: 2 }).default("0"),
-  finalCost: decimal("final_cost", { precision: 10, scale: 2 }).default("0"),
-
-  estimatedDate: timestamp("estimated_date"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  completedAt: timestamp("completed_at"),
-  deliveredAt: timestamp("delivered_at"),
-  priority: text("priority").default("normal"),
-  notes: text("notes").default(""),
-  intakeChecklist: jsonb("intake_checklist").default({}),
-});
-
-// --- PRODUCTS ---
-export const products = pgTable("products", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: text("user_id").notNull(),
-  name: text("name").notNull(),
-  description: text("description").default(""),
-  sku: text("sku").default(""),
-  quantity: integer("quantity").notNull().default(0),
-  price: decimal("price", { precision: 10, scale: 2 }).notNull(),
-  cost: decimal("cost", { precision: 10, scale: 2 }).notNull().default("0"),
-  category: text("category").default("General"),
-  lowStockThreshold: integer("low_stock_threshold").default(5),
-});
-
-// --- PAYMENTS ---
-export interface PaymentItem {
-  type: "product" | "repair" | "other";
-  id?: string;
-  name: string;
-  quantity: number;
-  price: number;
-}
-
-export const payments = pgTable("payments", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: text("user_id").notNull(),
-  orderId: text("order_id"),
-  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
-  method: text("method").notNull(),
-  date: timestamp("date").defaultNow().notNull(),
-  notes: text("notes").default(""),
-  items: jsonb("cart_items").$type<PaymentItem[]>(),
-});
-
-// --- EXPENSES ---
-export const expenses = pgTable("expenses", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: text("user_id").notNull(),
-  category: text("category").notNull(),
-  description: text("description").notNull(),
-  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
-  date: timestamp("date").notNull().defaultNow(),
-});
-
-// --- SETTINGS ---
-export const settings = pgTable("settings", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: text("user_id").notNull(),
-  shopName: text("shop_name").notNull().default("Mi Taller"),
-  address: text("address").default(""),
-  phone: text("phone").default(""),
-  email: text("email").default(""),
-  whatsapp: text("whatsapp").default(""),
-  landline: text("landline").default(""),
-  logoUrl: text("logo_url").default(""),
-  cardSurcharge: decimal("card_surcharge", { precision: 10, scale: 2 }).default("0"),
-  transferSurcharge: decimal("transfer_surcharge", { precision: 10, scale: 2 }).default("0"),
-  receiptDisclaimer: text("receipt_disclaimer").default("Garantía de 30 días."),
-  ticketFooter: text("ticket_footer").default("Gracias por su compra.\nConserve este ticket para garantía."),
-  checklistOptions: text("checklist_options").array().default(["¿Carga?", "¿Enciende?", "¿Golpeado?", "¿Mojado?", "¿Abierto previamente?", "¿En garantía?", "¿Micro SD?", "¿Porta SIM?", "¿Tarjeta SIM?"]),
-  printFormat: text("print_format").default("a4"),
-  dayCutoffHour: integer("day_cutoff_hour").default(0),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-
-// --------------------------------------------------------------------------
-// 3. TIPOS (INTERFACES)
-// --------------------------------------------------------------------------
-
-export const insertUserSchema = createInsertSchema(users);
-export type User = typeof users.$inferSelect;
-export type InsertUser = z.infer<typeof insertUserSchema>;
-
-export const insertClientSchema = createInsertSchema(clients).omit({ userId: true, id: true });
-export type Client = typeof clients.$inferSelect;
-export type InsertClient = z.infer<typeof insertClientSchema>;
-
-export const insertDeviceSchema = createInsertSchema(devices).omit({ userId: true, id: true });
-export type Device = typeof devices.$inferSelect;
-export type InsertDevice = z.infer<typeof insertDeviceSchema>;
-
-export const insertRepairOrderSchema = createInsertSchema(repairOrders, {
-  estimatedCost: z.coerce.number(),
-  finalCost: z.coerce.number()
-}).omit({ userId: true, id: true });
-
-export type RepairOrder = Omit<typeof repairOrders.$inferSelect, "estimatedCost" | "finalCost"> & {
-  estimatedCost: number;
-  finalCost: number;
-};
-export type InsertRepairOrder = z.infer<typeof insertRepairOrderSchema>;
-
-export const insertProductSchema = createInsertSchema(products, {
-  price: z.coerce.number(),
-  cost: z.coerce.number(),
-  quantity: z.coerce.number(),
-}).omit({ userId: true, id: true });
-
-export type Product = Omit<typeof products.$inferSelect, "price" | "cost"> & {
-  price: number;
-  cost: number;
-};
-export type InsertProduct = z.infer<typeof insertProductSchema>;
-
-export const insertPaymentSchema = createInsertSchema(payments, {
-  amount: z.coerce.number(),
-}).pick({
-  orderId: true,
-  amount: true,
-  method: true,
-  notes: true,
-  items: true
-});
-export type Payment = Omit<typeof payments.$inferSelect, "amount"> & {
-  amount: number;
-};
-export type InsertPayment = z.infer<typeof insertPaymentSchema>;
-
-export const insertExpenseSchema = createInsertSchema(expenses, {
-  date: z.coerce.date(),
-  amount: z.coerce.string()
-}).pick({
-  category: true,
-  description: true,
-  amount: true,
-  date: true,
-});
-export type Expense = Omit<typeof expenses.$inferSelect, "amount"> & {
-  amount: number;
-};
-export type InsertExpense = z.infer<typeof insertExpenseSchema>;
-
-export const insertSettingsSchema = createInsertSchema(settings, {
-  cardSurcharge: z.coerce.number(),
-  transferSurcharge: z.coerce.number(),
-}).pick({
-  shopName: true,
-  address: true,
-  phone: true,
-  email: true,
-  whatsapp: true,
-  landline: true,
-  logoUrl: true,
-  cardSurcharge: true,
-  transferSurcharge: true,
-  receiptDisclaimer: true,
-  ticketFooter: true,
-  checklistOptions: true,
-  printFormat: true,
-  dayCutoffHour: true,
-});
-export type Settings = Omit<typeof settings.$inferSelect, "cardSurcharge" | "transferSurcharge"> & {
-  cardSurcharge: number;
-  transferSurcharge: number;
-};
-export type InsertSettings = z.infer<typeof insertSettingsSchema>;
-
-
-export interface RepairOrderWithDetails extends RepairOrder {
-  client: Client;
-  device: Device;
-  payments?: Payment[];
-}
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -273,7 +33,6 @@ export interface IStorage {
 
   getPaymentsWithOrders(userId: string): Promise<(Payment & { order?: RepairOrder })[]>;
   createPayment(payment: InsertPayment & { userId: string, items: PaymentItem[] }): Promise<Payment>;
-  // NUEVO:
   deletePayment(id: string): Promise<void>;
 
   getProducts(userId: string): Promise<Product[]>;
@@ -283,8 +42,10 @@ export interface IStorage {
 
   getExpenses(userId: string): Promise<Expense[]>;
   createExpense(expense: InsertExpense & { userId: string }): Promise<Expense>;
-  // NUEVO:
   deleteExpense(id: string): Promise<void>;
+
+  getDailyCash(userId: string, date: string): Promise<DailyCash | undefined>;
+  upsertDailyCash(userId: string, cash: InsertDailyCash): Promise<DailyCash>;
 
   getStats(userId: string): Promise<any>;
 
@@ -293,6 +54,8 @@ export interface IStorage {
 }
 
 export class SupabaseStorage implements IStorage {
+
+  // --- MAPPERS ---
   private mapClient(row: any): Client {
     return {
       id: row.id,
@@ -381,6 +144,16 @@ export class SupabaseStorage implements IStorage {
     };
   }
 
+  private mapDailyCash(row: any): DailyCash {
+    return {
+      id: row.id,
+      userId: row.user_id,
+      date: row.date,
+      amount: parseFloat(row.amount || "0"),
+      createdAt: row.created_at ? new Date(row.created_at) : null
+    };
+  }
+
   private async enrichOrder(order: RepairOrder): Promise<RepairOrderWithDetails> {
     const client = await this.getClient(order.clientId);
     const device = await this.getDevice(order.deviceId);
@@ -399,6 +172,8 @@ export class SupabaseStorage implements IStorage {
       payments
     };
   }
+
+  // --- IMPLEMENTACIÓN DE MÉTODOS ---
 
   async getUser(id: string): Promise<User | undefined> {
     const { data } = await supabase.from("users").select("*").eq("id", id).single();
@@ -456,7 +231,6 @@ export class SupabaseStorage implements IStorage {
     if (error) return undefined;
     return this.mapClient(data);
   }
-
 
   async getDevices(userId: string): Promise<Device[]> {
     const { data } = await supabase.from("devices").select("*").eq("user_id", userId);
@@ -615,7 +389,6 @@ export class SupabaseStorage implements IStorage {
     return this.mapPayment(data);
   }
 
-  // NUEVO: BORRAR PAGO
   async deletePayment(id: string): Promise<void> {
     const { error } = await supabase.from("payments").delete().eq("id", id);
     if (error) throw error;
@@ -653,10 +426,53 @@ export class SupabaseStorage implements IStorage {
     };
   }
 
-  // NUEVO: BORRAR GASTO
   async deleteExpense(id: string): Promise<void> {
     const { error } = await supabase.from("expenses").delete().eq("id", id);
     if (error) throw error;
+  }
+
+  async getDailyCash(userId: string, date: string): Promise<DailyCash | undefined> {
+    const { data, error } = await supabase
+      .from("daily_cash")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("date", date)
+      .maybeSingle();
+
+    if (error) console.error("Error getting daily cash:", error);
+    return data ? this.mapDailyCash(data) : undefined;
+  }
+
+  async upsertDailyCash(userId: string, cash: InsertDailyCash): Promise<DailyCash> {
+    const existing = await this.getDailyCash(userId, cash.date);
+
+    let result;
+    if (existing) {
+      const { data, error } = await supabase
+        .from("daily_cash")
+        .update({ amount: String(cash.amount) })
+        .eq("id", existing.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      result = data;
+    } else {
+      const { data, error } = await supabase
+        .from("daily_cash")
+        .insert({
+          user_id: userId,
+          date: cash.date,
+          amount: String(cash.amount)
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      result = data;
+    }
+
+    return this.mapDailyCash(result);
   }
 
   async getStats(userId: string): Promise<any> {
@@ -707,6 +523,8 @@ export class SupabaseStorage implements IStorage {
     };
   }
 
+  // --- CORRECCIÓN EN PRODUCTOS (INCLUIR NUEVOS CAMPOS) ---
+
   async getProducts(userId: string): Promise<Product[]> {
     const { data } = await supabase.from("products").select("*").eq("user_id", userId).order("name");
     return (data || []).map(p => ({
@@ -719,7 +537,11 @@ export class SupabaseStorage implements IStorage {
       price: parseFloat(p.price),
       cost: parseFloat(p.cost),
       category: p.category,
-      lowStockThreshold: p.low_stock_threshold
+      lowStockThreshold: p.low_stock_threshold,
+      brand: p.brand,
+      model: p.model,
+      quality: p.quality,
+      detail: p.detail
     }));
   }
 
@@ -733,7 +555,11 @@ export class SupabaseStorage implements IStorage {
       price: product.price.toString(),
       cost: product.cost.toString(),
       category: product.category,
-      low_stock_threshold: product.lowStockThreshold
+      low_stock_threshold: product.lowStockThreshold, // CORREGIDO AQUÍ (lowStockThreshold en vez de low_stock_threshold)
+      brand: product.brand,
+      model: product.model,
+      quality: product.quality,
+      detail: product.detail
     };
     const { data, error } = await supabase.from("products").insert(payload).select().single();
     if (error) throw error;
@@ -747,7 +573,11 @@ export class SupabaseStorage implements IStorage {
       price: parseFloat(data.price),
       cost: parseFloat(data.cost),
       category: data.category,
-      lowStockThreshold: data.low_stock_threshold
+      lowStockThreshold: data.low_stock_threshold,
+      brand: data.brand,
+      model: data.model,
+      quality: data.quality,
+      detail: data.detail
     };
   }
 
@@ -759,6 +589,13 @@ export class SupabaseStorage implements IStorage {
     if (product.quantity !== undefined) payload.quantity = product.quantity;
     if (product.price !== undefined) payload.price = product.price.toString();
     if (product.cost !== undefined) payload.cost = product.cost.toString();
+    if (product.category !== undefined) payload.category = product.category; // Faltaba category
+    if (product.lowStockThreshold !== undefined) payload.low_stock_threshold = product.lowStockThreshold;
+
+    if (product.brand !== undefined) payload.brand = product.brand;
+    if (product.model !== undefined) payload.model = product.model;
+    if (product.quality !== undefined) payload.quality = product.quality;
+    if (product.detail !== undefined) payload.detail = product.detail;
 
     const { data, error } = await supabase.from("products").update(payload).eq("id", id).select().single();
     if (error) return undefined;
@@ -772,7 +609,11 @@ export class SupabaseStorage implements IStorage {
       price: parseFloat(data.price),
       cost: parseFloat(data.cost),
       category: data.category,
-      lowStockThreshold: data.low_stock_threshold
+      lowStockThreshold: data.low_stock_threshold,
+      brand: data.brand,
+      model: data.model,
+      quality: data.quality,
+      detail: data.detail
     };
   }
 

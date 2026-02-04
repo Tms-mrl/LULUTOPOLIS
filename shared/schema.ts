@@ -90,7 +90,7 @@ export const repairOrders = pgTable("repair_orders", {
   intakeChecklist: jsonb("intake_checklist").default({}),
 });
 
-// --- PRODUCTS (MODIFICADO) ---
+// --- PRODUCTS ---
 export const products = pgTable("products", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: text("user_id").notNull(),
@@ -103,11 +103,10 @@ export const products = pgTable("products", {
   category: text("category").default("General"),
   lowStockThreshold: integer("low_stock_threshold").default(5),
 
-  // --- NUEVOS CAMPOS ---
-  brand: text("brand").default(""),     // MARCA
-  model: text("model").default(""),     // MODELO
-  quality: text("quality").default(""), // CALIDAD
-  detail: text("detail").default(""),   // DETALLE
+  brand: text("brand").default(""),
+  model: text("model").default(""),
+  quality: text("quality").default(""),
+  detail: text("detail").default(""),
 });
 
 // --- PAYMENTS ---
@@ -138,6 +137,16 @@ export const expenses = pgTable("expenses", {
   description: text("description").notNull(),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   date: timestamp("date").notNull().defaultNow(),
+});
+
+// --- NUEVA TABLA: DAILY CASH (CAJA INICIAL DIARIA) ---
+export const dailyCash = pgTable("daily_cash", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: text("user_id").notNull(),
+  // Guardamos la fecha como string "YYYY-MM-DD" para identificar el "día lógico" único
+  date: text("date").notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull().default("0"),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 // --- SETTINGS ---
@@ -236,6 +245,19 @@ export type Expense = Omit<typeof expenses.$inferSelect, "amount"> & {
   amount: number;
 };
 export type InsertExpense = z.infer<typeof insertExpenseSchema>;
+
+// Daily Cash (Nuevo)
+export const insertDailyCashSchema = createInsertSchema(dailyCash, {
+  amount: z.coerce.number(),
+}).pick({
+  date: true,
+  amount: true,
+});
+// Omitimos amount string original y lo reemplazamos por number en el tipo
+export type DailyCash = Omit<typeof dailyCash.$inferSelect, "amount"> & {
+  amount: number;
+};
+export type InsertDailyCash = z.infer<typeof insertDailyCashSchema>;
 
 // Settings
 export const insertSettingsSchema = createInsertSchema(settings, {

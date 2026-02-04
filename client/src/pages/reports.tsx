@@ -8,7 +8,8 @@ import {
   DollarSign,
   Calendar,
   BarChart3,
-  Smartphone
+  Smartphone,
+  PieChart
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -45,6 +46,7 @@ import {
   LineChart,
   Line
 } from "recharts";
+import { cn } from "@/lib/utils";
 
 type Transaction = {
   id: string;
@@ -87,7 +89,6 @@ export default function Reports() {
   });
 
   // --- HELPER: CALCULAR FECHA LÓGICA ---
-  // Si la hora de la transacción es menor a la hora de corte, pertenece al día anterior.
   const getLogicalDate = (date: Date, cutoffHour: number = 0): Date => {
     const d = new Date(date);
     if (d.getHours() < cutoffHour) {
@@ -133,38 +134,34 @@ export default function Reports() {
 
   // --- FILTRADO PARA TABLA ---
   const filteredData = useMemo(() => {
-    // Calculamos el "hoy lógico"
     const nowReal = new Date();
     const nowLogical = getLogicalDate(nowReal, cutoffHour);
 
     if (filterPeriod === "all") return transactions;
 
     return transactions.filter(t => {
-      // Comparamos siempre usando las fechas LÓGICAS
       if (filterPeriod === "today") return isSameDay(t.logicalDate, nowLogical);
       if (filterPeriod === "month") return isSameMonth(t.logicalDate, nowLogical);
       return true;
     });
   }, [transactions, filterPeriod, cutoffHour]);
 
-  // --- DATOS PARA GRÁFICOS (ÚLTIMOS 6 MESES LÓGICOS) ---
+  // --- DATOS PARA GRÁFICOS ---
   const chartsData = useMemo(() => {
     const data: MonthlySummary[] = [];
     const nowReal = new Date();
     const nowLogical = getLogicalDate(nowReal, cutoffHour);
 
     for (let i = 5; i >= 0; i--) {
-      const date = subMonths(nowLogical, i); // Meses hacia atrás desde el "hoy lógico"
+      const date = subMonths(nowLogical, i);
       const monthKey = format(date, "yyyy-MM");
       const monthLabel = format(date, "MMM", { locale: es }).toUpperCase();
 
-      // Filtramos transacciones por su fecha LÓGICA
       const monthTransactions = transactions.filter(t => format(t.logicalDate, "yyyy-MM") === monthKey);
 
       const income = monthTransactions.filter(t => t.type === "income").reduce((acc, curr) => acc + curr.amount, 0);
       const expense = monthTransactions.filter(t => t.type === "expense").reduce((acc, curr) => acc + curr.amount, 0);
 
-      // Para órdenes también aplicamos lógica si queremos ser precisos, aunque suele ser menos crítico
       const monthOrders = orders.filter(o => {
         const d = new Date(o.createdAt);
         const ld = getLogicalDate(d, cutoffHour);
@@ -183,13 +180,12 @@ export default function Reports() {
     return data;
   }, [transactions, orders, cutoffHour]);
 
-  // --- DATOS MENSUALES TABLA (MODO HISTORIAL) ---
+  // --- DATOS MENSUALES TABLA ---
   const monthlyTableData = useMemo(() => {
     if (filterPeriod !== "all") return [];
     const groups: Record<string, MonthlySummary> = {};
 
     transactions.forEach(t => {
-      // Agrupamos por fecha LÓGICA
       const key = format(t.logicalDate, "yyyy-MM");
 
       if (!groups[key]) {
@@ -228,7 +224,7 @@ export default function Reports() {
     const headers = ["Fecha Real", "Fecha Contable", "Tipo", "Categoría", "Descripción", "Método", "Monto"];
     const rows = filteredData.map(t => [
       format(t.date, "dd/MM/yyyy HH:mm"),
-      format(t.logicalDate, "dd/MM/yyyy"), // Agregamos columna útil para el contador
+      format(t.logicalDate, "dd/MM/yyyy"),
       t.type === "income" ? "Ingreso" : "Gasto",
       t.category,
       `"${t.description.replace(/"/g, '""')}"`,
@@ -248,243 +244,306 @@ export default function Reports() {
 
   const isLoading = loadingPayments || loadingExpenses || loadingOrders;
 
+  // Estilos base para los triggers de las pestañas
+  const tabTriggerBase = "rounded-full px-6 py-2.5 transition-all flex gap-2 items-center border border-transparent data-[state=active]:shadow-sm data-[state=active]:font-medium";
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Reportes Financieros</h1>
-          <p className="text-muted-foreground">Control centralizado de ingresos y egresos</p>
-        </div>
+    <div className="min-h-screen bg-background/50 pb-20 space-y-8">
+      
+      {/* --- HEADER STICKY "GLASS" --- */}
+      <div className="sticky top-0 z-30 border-b border-border/40 bg-background/80 backdrop-blur-md px-6 py-4 transition-all">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 max-w-7xl mx-auto w-full">
+          <div className="flex flex-col gap-1 w-full sm:w-auto">
+            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+              <BarChart3 className="h-6 w-6 text-primary" />
+              Reportes
+            </h1>
+            <p className="text-sm text-muted-foreground hidden sm:block">
+              Análisis financiero y métricas de rendimiento.
+            </p>
+          </div>
+          
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <Select value={filterPeriod} onValueChange={(v: any) => setFilterPeriod(v)}>
+              <SelectTrigger className="w-[180px] bg-background/50 backdrop-blur-sm border-border/50">
+                <Calendar className="w-4 h-4 mr-2 text-muted-foreground" />
+                <SelectValue placeholder="Periodo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="today">Hoy (Jornada)</SelectItem>
+                <SelectItem value="month">Este Mes</SelectItem>
+                <SelectItem value="all">Todo el Historial</SelectItem>
+              </SelectContent>
+            </Select>
 
-        <div className="flex gap-3 w-full sm:w-auto">
-          <Select value={filterPeriod} onValueChange={(v: any) => setFilterPeriod(v)}>
-            <SelectTrigger className="w-[180px]">
-              <Calendar className="w-4 h-4 mr-2" />
-              <SelectValue placeholder="Periodo" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="today">Hoy (Jornada)</SelectItem>
-              <SelectItem value="month">Este Mes</SelectItem>
-              <SelectItem value="all">Todo el Historial</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Button variant="outline" onClick={handleExportCSV} disabled={transactions.length === 0}>
-            <Download className="h-4 w-4 mr-2" />
-            CSV
-          </Button>
+            {/* BOTÓN CSV (Estilo Esmeralda Glass) */}
+            <Button 
+                variant="outline" 
+                onClick={handleExportCSV} 
+                disabled={transactions.length === 0}
+                className="bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border-emerald-500/20 hover:border-emerald-500/40 shadow-sm backdrop-blur-sm transition-all"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              CSV
+            </Button>
+          </div>
         </div>
       </div>
 
-      {/* TABS PRINCIPALES */}
-      <Tabs defaultValue="financial" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 lg:w-[400px]">
-          <TabsTrigger value="financial">Resumen Financiero</TabsTrigger>
-          <TabsTrigger value="metrics">Métricas y Gráficos</TabsTrigger>
-        </TabsList>
-
-        {/* --- PESTAÑA 1: FINANCIERO (TABLAS Y CARDS) --- */}
-        <TabsContent value="financial" className="space-y-6 mt-4">
-          {/* SUMMARY CARDS */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {isLoading ? (
-              [1, 2, 3].map((i) => <Skeleton key={i} className="h-32 w-full" />)
-            ) : (
-              <>
-                <Card className="border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-900">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-green-700 dark:text-green-400">Total Ingresos</span>
-                      <TrendingUp className="h-4 w-4 text-green-600" />
-                    </div>
-                    <div className="text-3xl font-bold text-green-700 dark:text-green-400">
-                      {formatMoney(totalIncome)}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-900">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-red-700 dark:text-red-400">Total Gastos</span>
-                      <TrendingDown className="h-4 w-4 text-red-600" />
-                    </div>
-                    <div className="text-3xl font-bold text-red-700 dark:text-red-400">
-                      {formatMoney(totalExpenses)}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className={netBalance >= 0 ? "border-l-4 border-l-green-500" : "border-l-4 border-l-red-500"}>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-muted-foreground">Balance Neto</span>
-                      <DollarSign className="h-4 w-4 text-foreground" />
-                    </div>
-                    <div className={`text-3xl font-bold ${netBalance >= 0 ? "text-green-600" : "text-red-600"}`}>
-                      {formatMoney(netBalance)}
-                    </div>
-                  </CardContent>
-                </Card>
-              </>
-            )}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 w-full space-y-8">
+        
+        {/* TABS PRINCIPALES */}
+        <Tabs defaultValue="financial" className="w-full space-y-8">
+          
+          {/* --- LISTA DE PESTAÑAS FLOTANTES --- */}
+          <div className="flex justify-center">
+            <TabsList className="h-auto p-1 bg-muted/50 backdrop-blur-sm border border-border/50 rounded-full inline-flex flex-wrap justify-center gap-1">
+              <TabsTrigger 
+                value="financial" 
+                className={`${tabTriggerBase} data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:border-primary/20`}
+              >
+                <FileText className="h-4 w-4" /> Resumen Financiero
+              </TabsTrigger>
+              <TabsTrigger 
+                value="metrics" 
+                className={`${tabTriggerBase} data-[state=active]:bg-blue-500/10 data-[state=active]:text-blue-500 data-[state=active]:border-blue-500/20`}
+              >
+                <PieChart className="h-4 w-4" /> Métricas y Gráficos
+              </TabsTrigger>
+            </TabsList>
           </div>
 
-          {/* TABLA DE MOVIMIENTOS */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                {filterPeriod === "all" ? "Resumen Mensual" : "Movimientos Detallados"}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="rounded-md border max-h-[500px] overflow-y-auto">
-                <Table>
-                  <TableHeader className="sticky top-0 bg-background z-10">
-                    <TableRow>
-                      {filterPeriod === "all" ? (
-                        <>
-                          <TableHead>Periodo</TableHead>
-                          <TableHead className="text-right text-green-600">Ingresos</TableHead>
-                          <TableHead className="text-right text-red-600">Egresos</TableHead>
-                          <TableHead className="text-right font-bold">Balance</TableHead>
-                        </>
+          {/* --- PESTAÑA 1: FINANCIERO (KPIs + TABLA) --- */}
+          <TabsContent value="financial" className="space-y-6 animate-in fade-in-50 slide-in-from-bottom-2 duration-300">
+            
+            {/* KPI CARDS (RESUMEN) */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {isLoading ? (
+                [1, 2, 3].map((i) => <Skeleton key={i} className="h-32 w-full" />)
+              ) : (
+                <>
+                  {/* Ingresos (Verde) */}
+                  <Card className="border-border/50 bg-gradient-to-br from-card via-card/95 to-emerald-500/10 shadow-sm relative overflow-hidden">
+                    <div className="absolute right-0 top-0 p-3 opacity-10">
+                      <TrendingUp className="w-24 h-24 text-emerald-500" />
+                    </div>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                        <TrendingUp className="h-4 w-4 text-emerald-500" /> Total Ingresos
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">
+                        {formatMoney(totalIncome)}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Gastos (Rojo) */}
+                  <Card className="border-border/50 bg-gradient-to-br from-card via-card/95 to-red-500/10 shadow-sm relative overflow-hidden">
+                    <div className="absolute right-0 top-0 p-3 opacity-10">
+                      <TrendingDown className="w-24 h-24 text-red-500" />
+                    </div>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                        <TrendingDown className="h-4 w-4 text-red-500" /> Total Gastos
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-bold text-red-600 dark:text-red-400">
+                        {formatMoney(totalExpenses)}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Balance (Azul) */}
+                  <Card className="border-border/50 bg-gradient-to-br from-card via-card/95 to-blue-500/10 shadow-sm relative overflow-hidden">
+                    <div className="absolute right-0 top-0 p-3 opacity-10">
+                      <DollarSign className="w-24 h-24 text-blue-500" />
+                    </div>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                        <DollarSign className="h-4 w-4 text-blue-500" /> Balance Neto
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className={cn("text-3xl font-bold", netBalance >= 0 ? "text-blue-600 dark:text-blue-400" : "text-red-500")}>
+                        {formatMoney(netBalance)}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </>
+              )}
+            </div>
+
+            {/* TABLA DE MOVIMIENTOS */}
+            <Card className="border-border/50 bg-card/50 backdrop-blur-sm shadow-sm overflow-hidden">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-muted-foreground" />
+                  {filterPeriod === "all" ? "Historial Mensual" : "Detalle de Movimientos"}
+                </CardTitle>
+                <CardDescription>
+                    {filterPeriod === "all" ? "Resumen consolidado mes a mes." : "Listado detallado de ingresos y egresos del periodo seleccionado."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/30 hover:bg-muted/30">
+                        {filterPeriod === "all" ? (
+                          <>
+                            <TableHead>Periodo</TableHead>
+                            <TableHead className="text-right text-emerald-600">Ingresos</TableHead>
+                            <TableHead className="text-right text-red-600">Egresos</TableHead>
+                            <TableHead className="text-right font-bold">Balance</TableHead>
+                          </>
+                        ) : (
+                          <>
+                            <TableHead className="w-[180px]">Fecha</TableHead>
+                            <TableHead className="w-[120px]">Tipo</TableHead>
+                            <TableHead className="w-[150px]">Categoría</TableHead>
+                            <TableHead>Descripción</TableHead>
+                            <TableHead>Método</TableHead>
+                            <TableHead className="text-right w-[150px]">Monto</TableHead>
+                          </>
+                        )}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {isLoading ? (
+                        <TableRow><TableCell colSpan={6} className="text-center h-24">Cargando...</TableCell></TableRow>
                       ) : (
                         <>
-                          <TableHead>Fecha</TableHead>
-                          <TableHead>Tipo</TableHead>
-                          <TableHead>Categoría</TableHead>
-                          <TableHead className="w-[300px]">Descripción</TableHead>
-                          <TableHead>Método</TableHead>
-                          <TableHead className="text-right">Monto</TableHead>
+                          {filterPeriod === "all" ? (
+                            monthlyTableData.length === 0 ? (
+                              <TableRow><TableCell colSpan={4} className="text-center h-24 text-muted-foreground">Sin datos históricos.</TableCell></TableRow>
+                            ) : (
+                              monthlyTableData.map((month) => (
+                                <TableRow key={month.id} className="hover:bg-muted/30 transition-colors">
+                                  <TableCell className="font-bold capitalize">{month.label}</TableCell>
+                                  <TableCell className="text-right text-emerald-600 font-medium tabular-nums">+ {formatMoney(month.income)}</TableCell>
+                                  <TableCell className="text-right text-red-600 font-medium tabular-nums">- {formatMoney(month.expense)}</TableCell>
+                                  <TableCell className={`text-right font-bold tabular-nums ${month.balance >= 0 ? "text-blue-600 dark:text-blue-400" : "text-red-600"}`}>
+                                    {formatMoney(month.balance)}
+                                  </TableCell>
+                                </TableRow>
+                              ))
+                            )
+                          ) : (
+                            filteredData.length === 0 ? (
+                              <TableRow><TableCell colSpan={6} className="text-center h-24 text-muted-foreground">Sin movimientos en este periodo.</TableCell></TableRow>
+                            ) : (
+                              filteredData.map((t) => (
+                                <TableRow key={t.id} className="hover:bg-muted/30 transition-colors">
+                                  <TableCell className="font-mono text-xs text-muted-foreground">
+                                    {format(t.date, "dd/MM/yyyy HH:mm")}
+                                    {/* Indicador visual si la fecha lógica es diferente */}
+                                    {t.date.getDate() !== t.logicalDate.getDate() && (
+                                      <span className="block text-[10px] opacity-70">
+                                        (Contable: {format(t.logicalDate, "dd/MM")})
+                                      </span>
+                                    )}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant={t.type === "income" ? "outline" : "outline"} 
+                                        className={cn("text-[10px] h-5 px-1.5", 
+                                            t.type === "income" 
+                                            ? "bg-emerald-500/10 text-emerald-600 border-emerald-200 dark:border-emerald-800" 
+                                            : "bg-red-500/10 text-red-600 border-red-200 dark:border-red-800"
+                                        )}>
+                                      {t.type === "income" ? "Ingreso" : "Gasto"}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="secondary" className="font-normal text-xs bg-muted/50">
+                                        {t.category}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="max-w-[300px] truncate text-sm" title={t.description}>{t.description}</TableCell>
+                                  <TableCell className="capitalize text-sm text-muted-foreground">{t.method}</TableCell>
+                                  <TableCell className={`text-right font-bold tabular-nums ${t.type === "income" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                                    {t.type === "income" ? "+" : "-"} {formatMoney(t.amount)}
+                                  </TableCell>
+                                </TableRow>
+                              ))
+                            )
+                          )}
                         </>
                       )}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {isLoading ? (
-                      <TableRow><TableCell colSpan={6} className="text-center h-24">Cargando...</TableCell></TableRow>
-                    ) : (
-                      <>
-                        {filterPeriod === "all" ? (
-                          monthlyTableData.length === 0 ? (
-                            <TableRow><TableCell colSpan={4} className="text-center h-24">Sin datos.</TableCell></TableRow>
-                          ) : (
-                            monthlyTableData.map((month) => (
-                              <TableRow key={month.id}>
-                                <TableCell className="font-bold capitalize text-base">{month.label}</TableCell>
-                                <TableCell className="text-right text-green-600 font-medium">+ {formatMoney(month.income)}</TableCell>
-                                <TableCell className="text-right text-red-600 font-medium">- {formatMoney(month.expense)}</TableCell>
-                                <TableCell className={`text-right font-bold text-base ${month.balance >= 0 ? "text-green-600" : "text-red-600"}`}>
-                                  {formatMoney(month.balance)}
-                                </TableCell>
-                              </TableRow>
-                            ))
-                          )
-                        ) : (
-                          filteredData.length === 0 ? (
-                            <TableRow><TableCell colSpan={6} className="text-center h-24">Sin movimientos.</TableCell></TableRow>
-                          ) : (
-                            filteredData.map((t) => (
-                              <TableRow key={t.id}>
-                                <TableCell className="font-medium">
-                                  {format(t.date, "dd/MM/yyyy HH:mm")}
-                                  {/* Indicador visual si la fecha lógica es diferente */}
-                                  {t.date.getDate() !== t.logicalDate.getDate() && (
-                                    <span className="block text-[10px] text-muted-foreground font-normal">
-                                      (Contable: {format(t.logicalDate, "dd/MM")})
-                                    </span>
-                                  )}
-                                </TableCell>
-                                <TableCell>
-                                  <Badge variant={t.type === "income" ? "default" : "destructive"} className={t.type === "income" ? "bg-green-600 hover:bg-green-700" : ""}>
-                                    {t.type === "income" ? "Ingreso" : "Gasto"}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell>{t.category}</TableCell>
-                                <TableCell className="max-w-[300px] truncate" title={t.description}>{t.description}</TableCell>
-                                <TableCell className="capitalize">{t.method}</TableCell>
-                                <TableCell className={`text-right font-bold ${t.type === "income" ? "text-green-600" : "text-red-600"}`}>
-                                  {t.type === "income" ? "+" : "-"} {formatMoney(t.amount)}
-                                </TableCell>
-                              </TableRow>
-                            ))
-                          )
-                        )}
-                      </>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* --- PESTAÑA 2: MÉTRICAS Y GRÁFICOS --- */}
-        <TabsContent value="metrics" className="space-y-6 mt-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-            {/* GRÁFICO 1: EVOLUCIÓN FINANCIERA (BARRAS SIN CURSOR) */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <BarChart3 className="h-5 w-5" />
-                  Evolución Financiera (6 Meses)
-                </CardTitle>
-                <CardDescription>Comparativa de Ingresos vs Gastos</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[300px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartsData}>
-                      <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                      <XAxis dataKey="label" fontSize={12} />
-                      <YAxis fontSize={12} />
-                      <Tooltip
-                        cursor={false}
-                        formatter={(value: number) => formatMoney(value)}
-                        contentStyle={{ backgroundColor: 'var(--background)', borderColor: 'var(--border)' }}
-                      />
-                      <Legend />
-                      <Bar dataKey="income" name="Ingresos" fill="#16a34a" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="expense" name="Gastos" fill="#dc2626" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                    </TableBody>
+                  </Table>
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
 
-            {/* GRÁFICO 2: EQUIPOS INGRESADOS (LÍNEA) */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Smartphone className="h-5 w-5" />
-                  Equipos Ingresados
-                </CardTitle>
-                <CardDescription>Volumen de trabajo mensual</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[300px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={chartsData}>
-                      <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                      <XAxis dataKey="label" fontSize={12} />
-                      <YAxis fontSize={12} allowDecimals={false} />
-                      <Tooltip
-                        contentStyle={{ backgroundColor: 'var(--background)', borderColor: 'var(--border)' }}
-                      />
-                      <Legend />
-                      <Line type="monotone" dataKey="ordersCount" name="Equipos Recibidos" stroke="#2563eb" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
+          {/* --- PESTAÑA 2: MÉTRICAS Y GRÁFICOS --- */}
+          <TabsContent value="metrics" className="space-y-6 mt-4 animate-in fade-in-50 slide-in-from-bottom-2 duration-300">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-          </div>
-        </TabsContent>
-      </Tabs>
+              {/* GRÁFICO 1: EVOLUCIÓN FINANCIERA */}
+              <Card className="border-border/50 bg-card/50 backdrop-blur-sm shadow-sm">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <BarChart3 className="h-5 w-5 text-muted-foreground" />
+                    Evolución Financiera (6 Meses)
+                  </CardTitle>
+                  <CardDescription>Comparativa de Ingresos vs Gastos</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-[300px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={chartsData}>
+                        <CartesianGrid strokeDasharray="3 3" opacity={0.2} vertical={false} />
+                        <XAxis dataKey="label" fontSize={12} tickLine={false} axisLine={false} />
+                        <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value/1000}k`} />
+                        <Tooltip
+                          cursor={{ fill: 'var(--muted)', opacity: 0.2 }}
+                          formatter={(value: number) => formatMoney(value)}
+                          contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                        />
+                        <Legend iconType="circle" />
+                        <Bar dataKey="income" name="Ingresos" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={50} />
+                        <Bar dataKey="expense" name="Gastos" fill="#ef4444" radius={[4, 4, 0, 0]} maxBarSize={50} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* GRÁFICO 2: EQUIPOS INGRESADOS */}
+              <Card className="border-border/50 bg-card/50 backdrop-blur-sm shadow-sm">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Smartphone className="h-5 w-5 text-muted-foreground" />
+                    Equipos Ingresados
+                  </CardTitle>
+                  <CardDescription>Volumen de trabajo mensual</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-[300px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={chartsData}>
+                        <CartesianGrid strokeDasharray="3 3" opacity={0.2} vertical={false} />
+                        <XAxis dataKey="label" fontSize={12} tickLine={false} axisLine={false} />
+                        <YAxis fontSize={12} allowDecimals={false} tickLine={false} axisLine={false} />
+                        <Tooltip
+                          contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                        />
+                        <Legend iconType="circle" />
+                        <Line type="monotone" dataKey="ordersCount" name="Equipos Recibidos" stroke="#3b82f6" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+
+            </div>
+          </TabsContent>
+        </Tabs>
+      </div>
     </div>
   );
 }

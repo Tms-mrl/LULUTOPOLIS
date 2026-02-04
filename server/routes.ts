@@ -12,7 +12,7 @@ const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 } // Límite 5MB
 });
 
-// Cliente Global de Supabase (Solo para verificar usuarios, NO para storage)
+// Cliente Global de Supabase
 const supabaseUrl = process.env.SUPABASE_URL || "";
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const supabase = createClient(supabaseUrl, supabaseKey);
@@ -72,11 +72,8 @@ export async function registerRoutes(server: Server, app: Express) {
       res.status(201).json(result);
     } catch (e) { res.status(500).json({ error: "Error interno" }); }
   });
-  // NUEVO: BORRAR PAGO
   app.delete("/api/payments/:id", async (req, res) => {
     try {
-      // Opcional: Validar usuario con 'u' si tu storage lo soporta
-      // const u = await getUserId(req);
       await storage.deletePayment(req.params.id);
       res.sendStatus(204);
     } catch (e) {
@@ -87,7 +84,6 @@ export async function registerRoutes(server: Server, app: Express) {
   // --- GASTOS (EXPENSES) ---
   app.get("/api/expenses", async (req, res) => { try { const u = await getUserId(req); res.json(await storage.getExpenses(u)); } catch (e) { res.status(500).json({ error: "Error" }); } });
   app.post("/api/expenses", async (req, res) => { try { const p = insertExpenseSchema.safeParse(req.body); if (!p.success) return res.status(400).json({ error: p.error.errors }); const u = await getUserId(req); res.status(201).json(await storage.createExpense({ ...p.data, userId: u, user_id: u } as any)); } catch (e) { res.status(500).json({ error: "Error" }); } });
-  // NUEVO: BORRAR GASTO
   app.delete("/api/expenses/:id", async (req, res) => {
     try {
       await storage.deleteExpense(req.params.id);
@@ -97,7 +93,69 @@ export async function registerRoutes(server: Server, app: Express) {
     }
   });
 
-  app.get("/api/stats", async (req, res) => { try { const u = await getUserId(req); res.json(await storage.getStats(u)); } catch (e) { res.status(500).json({ error: "Error" }); } });
+  // =========================================================
+  // RUTA DASHBOARD CORREGIDA (Cierre de Caja Custom)
+  // =========================================================
+  app.get("/api/stats", async (req, res) => {
+    try {
+      const userId = await getUserId(req);
+
+      // 1. Obtenemos configuración
+      const settings = await storage.getSettings(userId);
+
+      // 2. Leemos 'dayCutoffHour'. 
+      // Usamos "as any" para evitar el error de TypeScript si el tipo no está actualizado.
+      // Si no existe, usamos 0 (medianoche) como default.
+      const cutoffHour = Number((settings as any)?.dayCutoffHour ?? 0);
+
+      // 3. Cálculo del Inicio del Turno
+      const now = new Date();
+
+      // Creamos una fecha para el "cierre de hoy" a la hora configurada
+      let startDate = new Date(now);
+      startDate.setHours(cutoffHour, 0, 0, 0); // (Hora, Minuto 0, Segundo 0, Ms 0)
+
+      // LÓGICA CLAVE: 
+      // Si "ahora" es antes de la hora de corte de hoy...
+      // Ej: Cierro a las 21hs, y son las 15hs.
+      // Significa que todavía estoy en el turno que empezó AYER a las 21hs.
+      if (now < startDate) {
+        startDate.setDate(startDate.getDate() - 1);
+      }
+
+      // 4. Obtenemos TODOS los datos
+      const allPayments = await storage.getPaymentsWithOrders(userId);
+      const allExpenses = await storage.getExpenses(userId);
+      const allOrders = await storage.getOrdersWithDetails(userId);
+
+      // 5. Filtramos usando startDate
+      const totalIncome = allPayments
+        .filter(p => new Date(p.date) >= startDate)
+        .reduce((sum, p) => sum + Number(p.amount), 0);
+
+      const totalExpenses = allExpenses
+        .filter(e => new Date(e.date) >= startDate)
+        .reduce((sum, e) => sum + Number(e.amount), 0);
+
+      // 6. Contamos órdenes activas (siempre es el total actual, sin importar fecha)
+      const activeOrdersCount = allOrders.filter(o =>
+        o.status !== "entregado" && o.status !== "cancelado"
+      ).length;
+
+      res.json({
+        activeOrdersCount,
+        totalIncome,
+        totalExpenses,
+        netBalance: totalIncome - totalExpenses,
+        // debugStart: startDate.toLocaleString() // Descomenta esto si quieres ver en la consola del navegador qué fecha calculó
+      });
+
+    } catch (e) {
+      console.error("Error en stats:", e);
+      res.status(500).json({ error: "Error calculando estadísticas" });
+    }
+  });
+  // =========================================================
 
   app.get("/api/settings", async (req, res) => { try { const u = await getUserId(req); res.json((await storage.getSettings(u)) || {}); } catch (e) { res.status(500).json({ error: "Error" }); } });
   app.post("/api/settings", async (req, res) => { try { const p = insertSettingsSchema.safeParse(req.body); if (!p.success) return res.status(400).json({ error: p.error.errors }); const u = await getUserId(req); res.json(await storage.updateSettings(u, p.data)); } catch (e) { res.status(500).json({ error: "Error" }); } });
@@ -107,7 +165,6 @@ export async function registerRoutes(server: Server, app: Express) {
 
   app.post("/api/products", async (req, res) => {
     try {
-      // El insertProductSchema ya incluye los nuevos campos (brand, model, quality, detail)
       const p = insertProductSchema.safeParse(req.body);
       if (!p.success) return res.status(400).json({ error: p.error.errors });
       const u = await getUserId(req);
@@ -117,7 +174,6 @@ export async function registerRoutes(server: Server, app: Express) {
 
   app.patch("/api/products/:id", async (req, res) => {
     try {
-      // Aquí también se actualizarán los nuevos campos automáticamente
       const u = await storage.updateProduct(req.params.id, req.body);
       if (!u) return res.status(404).json({ error: "Not found" });
       res.json(u);
@@ -127,9 +183,8 @@ export async function registerRoutes(server: Server, app: Express) {
   app.delete("/api/products/:id", async (req, res) => { try { const u = await getUserId(req); await storage.deleteProduct(req.params.id, u); res.sendStatus(204); } catch (e) { res.status(500).json({ error: "Error deleting product" }); } });
 
   // ---------------------------------------------------------
-  // RUTA UPLOAD CORREGIDA (FIX "Unexpected field")
+  // RUTA UPLOAD
   // ---------------------------------------------------------
-  // CORRECCIÓN: Usamos "file" porque eso es lo que envía tu Frontend.
   app.post("/api/upload", upload.single("file"), (req: any, res: any) => {
     try {
       if (!req.file) {

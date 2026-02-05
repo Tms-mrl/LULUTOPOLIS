@@ -11,6 +11,7 @@ import {
   TrendingUp,
   Inbox,
   LayoutDashboard,
+  Pencil,
   Save
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -40,7 +41,6 @@ export default function Dashboard() {
   const [initialCashInput, setInitialCashInput] = useState("");
 
   // 1. DATA FETCHING
-  // FIX: Agregamos el tipo genérico <{...}> para que TS sepa qué propiedades tiene 'stats'
   const { data: stats, isLoading: statsLoading } = useQuery<{
     activeOrders: number;
     pendingDiagnosis: number;
@@ -74,13 +74,16 @@ export default function Dashboard() {
     queryKey: ["/api/cash/today"],
   });
 
+  // DETERMINAR SI ES OBLIGATORIO (No hay dato aún)
+  const isForcedOpen = !cashLoading && cashData?.amount === null;
+
   // 2. EFECTO: ABRIR POP-UP AUTOMÁTICAMENTE
   useEffect(() => {
-    if (!cashLoading && cashData && cashData.amount === null) {
+    if (isForcedOpen) {
       setIsCashDialogOpen(true);
       setInitialCashInput("");
     }
-  }, [cashData, cashLoading]);
+  }, [isForcedOpen]);
 
   // 3. MUTATION: GUARDAR CAJA
   const saveCashMutation = useMutation({
@@ -112,10 +115,12 @@ export default function Dashboard() {
 
   const dailyIncome = todayPayments.reduce((sum, p) => sum + Number(p.amount), 0);
   const dailyExpenses = todayExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
-  const dailyNet = dailyIncome - dailyExpenses;
 
+  // CAJA INICIAL FIJA
   const initialCash = Number(cashData?.amount ?? 0);
-  const currentCashInBox = initialCash + dailyNet;
+
+  // TOTAL REAL EN CAJA
+  const totalCashInBox = initialCash + dailyIncome - dailyExpenses;
 
   // Lógica de Actividad Reciente
   const recentActivity = orders
@@ -183,14 +188,14 @@ export default function Dashboard() {
             ))
           ) : (
             <>
-              {/* TARJETA 1: CAJA ACTUAL (Con botón editar) */}
+              {/* TARJETA 1: CAJA INICIAL (Valor Fijo) */}
               <Card className="border-border/50 bg-gradient-to-br from-card via-card/95 to-blue-500/10 shadow-sm relative overflow-hidden group hover:border-blue-500/20 transition-all">
                 <div className="absolute right-0 top-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
                   <Wallet className="w-24 h-24 text-blue-500" />
                 </div>
                 <CardHeader className="pb-2 flex flex-row items-center justify-between">
                   <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                    <Wallet className="h-4 w-4 text-blue-500" /> Caja Actual (Efectivo)
+                    <Wallet className="h-4 w-4 text-blue-500" /> Caja Inicial
                   </CardTitle>
                   <Button
                     variant="ghost"
@@ -200,17 +205,17 @@ export default function Dashboard() {
                       setInitialCashInput(String(initialCash));
                       setIsCashDialogOpen(true);
                     }}
-                    title="Ajustar Caja Inicial"
+                    title="Corregir Caja Inicial"
                   >
-
+                    <Pencil className="h-3 w-3" />
                   </Button>
                 </CardHeader>
                 <CardContent>
                   <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
-                    {formatMoney(currentCashInBox)}
+                    {formatMoney(initialCash)}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Inicio día: {formatMoney(initialCash)}
+                    Base del turno
                   </p>
                 </CardContent>
               </Card>
@@ -249,20 +254,23 @@ export default function Dashboard() {
                 </CardContent>
               </Card>
 
-              {/* Balance Neto */}
+              {/* Total en Caja */}
               <Card className="border-border/50 bg-gradient-to-br from-card via-card/95 to-indigo-500/10 shadow-sm relative overflow-hidden group hover:border-indigo-500/20 transition-all">
                 <div className="absolute right-0 top-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
                   <DollarSign className="w-24 h-24 text-indigo-500" />
                 </div>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                    <DollarSign className="h-4 w-4 text-indigo-500" /> Neto (Hoy)
+                    <DollarSign className="h-4 w-4 text-indigo-500" /> Total en Caja (Neto)
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className={cn("text-3xl font-bold", dailyNet >= 0 ? "text-indigo-600 dark:text-indigo-400" : "text-red-500")}>
-                    {formatMoney(dailyNet)}
+                  <div className={cn("text-3xl font-bold", totalCashInBox >= 0 ? "text-indigo-600 dark:text-indigo-400" : "text-red-500")}>
+                    {formatMoney(totalCashInBox)}
                   </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    (Inicial + Ingresos - Gastos)
+                  </p>
                 </CardContent>
               </Card>
             </>
@@ -270,12 +278,30 @@ export default function Dashboard() {
         </div>
 
         {/* --- POP-UP DE CAJA INICIAL --- */}
-        <Dialog open={isCashDialogOpen} onOpenChange={setIsCashDialogOpen}>
-          <DialogContent className="sm:max-w-[400px]">
+        <Dialog
+          open={isCashDialogOpen}
+          onOpenChange={(open) => {
+            // BLOQUEO: Si es obligatorio (forced), no permitimos cerrar poniendo 'open' en false
+            if (isForcedOpen && !open) return;
+            setIsCashDialogOpen(open);
+          }}
+        >
+          <DialogContent
+            // CLASE MÁGICA: [&>button]:hidden oculta el botón "X" de cierre
+            className={cn("sm:max-w-[400px]", isForcedOpen && "[&>button]:hidden")}
+            // BLOQUEO DE INTERACCIÓN: Evita cerrar con click afuera
+            onPointerDownOutside={(e) => { if (isForcedOpen) e.preventDefault(); }}
+            // BLOQUEO DE TECLADO: Evita cerrar con ESC
+            onEscapeKeyDown={(e) => { if (isForcedOpen) e.preventDefault(); }}
+          >
             <DialogHeader>
-              <DialogTitle>Apertura de Caja</DialogTitle>
+              <DialogTitle>
+                {isForcedOpen ? "⚠️ Apertura de Caja Obligatoria" : "Ajustar Caja Inicial"}
+              </DialogTitle>
               <DialogDescription>
-                Por favor, ingresa el dinero en efectivo con el que inicias el turno hoy.
+                {isForcedOpen
+                  ? "Para comenzar a operar, debes definir el monto de efectivo en caja."
+                  : "Modifica el monto inicial si hubo un error en la apertura."}
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
@@ -306,7 +332,7 @@ export default function Dashboard() {
           </DialogContent>
         </Dialog>
 
-        {/* --- ACTIVIDAD RECIENTE --- */}
+        {/* --- ACTIVIDAD RECIENTE (SIN CAMBIOS) --- */}
         <div>
           <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
             <ClipboardList className="h-5 w-5 text-muted-foreground" />
@@ -332,7 +358,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* --- ESTADO OPERATIVO --- */}
+        {/* --- ESTADO OPERATIVO (SIN CAMBIOS) --- */}
         <div>
           <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
             <Inbox className="h-5 w-5 text-muted-foreground" />

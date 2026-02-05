@@ -1,27 +1,25 @@
 import type { Express, Request } from "express";
 import { type Server } from "http";
 import { storage } from "./storage";
-import {
-  insertRepairOrderSchema,
-  insertClientSchema,
-  insertDeviceSchema,
-  insertPaymentSchema,
-  insertSettingsSchema,
-  insertProductSchema,
+import { 
+  insertRepairOrderSchema, 
+  insertClientSchema, 
+  insertDeviceSchema, 
+  insertPaymentSchema, 
+  insertSettingsSchema, 
+  insertProductSchema, 
   insertExpenseSchema,
-  insertDailyCashSchema // Importamos el schema de validación
+  insertDailyCashSchema 
 } from "@shared/schema";
 import { createClient } from "@supabase/supabase-js";
 import multer from "multer";
 import nodemailer from "nodemailer";
 
-// 1. CONFIGURACIÓN MULTER (RAM)
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 } // Límite 5MB
+  limits: { fileSize: 5 * 1024 * 1024 }
 });
 
-// Cliente Global de Supabase
 const supabaseUrl = process.env.SUPABASE_URL || "";
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const supabase = createClient(supabaseUrl, supabaseKey);
@@ -69,7 +67,6 @@ export async function registerRoutes(server: Server, app: Express) {
   app.post("/api/orders", async (req, res) => { try { const p = insertRepairOrderSchema.safeParse(req.body); if (!p.success) return res.status(400).json({ error: p.error.errors }); const u = await getUserId(req); res.status(201).json(await storage.createOrder({ ...p.data, userId: u, user_id: u } as any)); } catch (e) { res.status(500).json({ error: "Error" }); } });
   app.patch("/api/orders/:id", async (req, res) => { try { const u = await storage.updateOrder(req.params.id, req.body); if (!u) return res.status(404).json({ error: "Not found" }); res.json(u); } catch (e) { res.status(500).json({ error: "Error" }); } });
 
-  // --- PAGOS (PAYMENTS) ---
   app.get("/api/payments", async (req, res) => { try { const u = await getUserId(req); res.json(await storage.getPaymentsWithOrders(u)); } catch (e) { res.status(500).json({ error: "Error" }); } });
   app.post("/api/payments", async (req, res) => {
     try {
@@ -90,7 +87,6 @@ export async function registerRoutes(server: Server, app: Express) {
     }
   });
 
-  // --- GASTOS (EXPENSES) ---
   app.get("/api/expenses", async (req, res) => { try { const u = await getUserId(req); res.json(await storage.getExpenses(u)); } catch (e) { res.status(500).json({ error: "Error" }); } });
   app.post("/api/expenses", async (req, res) => { try { const p = insertExpenseSchema.safeParse(req.body); if (!p.success) return res.status(400).json({ error: p.error.errors }); const u = await getUserId(req); res.status(201).json(await storage.createExpense({ ...p.data, userId: u, user_id: u } as any)); } catch (e) { res.status(500).json({ error: "Error" }); } });
   app.delete("/api/expenses/:id", async (req, res) => {
@@ -103,27 +99,31 @@ export async function registerRoutes(server: Server, app: Express) {
   });
 
   // =========================================================
-  // GESTIÓN DE CAJA INICIAL (USANDO STORAGE)
+  // GESTIÓN DE CAJA INICIAL (DINÁMICA + FIX ZONA HORARIA)
   // =========================================================
-
-  // 1. OBTENER CAJA INICIAL DE HOY
+  
   app.get("/api/cash/today", async (req, res) => {
     try {
       const u = await getUserId(req);
+      
+      // 1. LEER CONFIGURACIÓN DEL USUARIO (Aquí tomamos tu botón de cierre)
       const settings = await storage.getSettings(u);
-
-      // Cálculo del "Día Lógico"
       const cutoffHour = Number((settings as any)?.dayCutoffHour ?? 0);
+      
+      // 2. CALCULAR FECHA LÓGICA (Ajustada a Argentina -3h)
       const now = new Date();
+      now.setUTCHours(now.getUTCHours() - 3); // Restamos 3hs al servidor UTC
+
+      // Si la hora actual (ya ajustada) es menor al cierre, seguimos en "ayer"
       if (now.getHours() < cutoffHour) {
         now.setDate(now.getDate() - 1);
       }
-      const dateStr = now.toISOString().split("T")[0]; // "2024-02-04"
+      
+      // Formato YYYY-MM-DD
+      const dateStr = now.toISOString().split("T")[0];
 
-      // Usamos el método de storage
+      // 3. BUSCAR EN STORAGE
       const result = await storage.getDailyCash(u, dateStr);
-
-      // Si no existe registro, devolvemos null para que el frontend sepa que debe pedirlo
       res.json({ amount: result ? result.amount : null });
     } catch (e) {
       console.error("Error obteniendo caja:", e);
@@ -131,33 +131,34 @@ export async function registerRoutes(server: Server, app: Express) {
     }
   });
 
-  // 2. GUARDAR/ACTUALIZAR CAJA INICIAL DE HOY
   app.post("/api/cash", async (req, res) => {
     try {
       const u = await getUserId(req);
-      // Validamos el body con Zod
       const parseResult = insertDailyCashSchema.pick({ amount: true }).safeParse(req.body);
-
+      
       if (!parseResult.success) {
         return res.status(400).json({ error: parseResult.error.errors });
       }
 
+      // 1. LEER CONFIGURACIÓN (Mismo proceso para guardar en la fecha correcta)
       const settings = await storage.getSettings(u);
-
-      // Cálculo del "Día Lógico"
       const cutoffHour = Number((settings as any)?.dayCutoffHour ?? 0);
+      
+      // 2. CALCULAR FECHA LÓGICA
       const now = new Date();
+      now.setUTCHours(now.getUTCHours() - 3); // Fix Argentina
+
       if (now.getHours() < cutoffHour) {
         now.setDate(now.getDate() - 1);
       }
       const dateStr = now.toISOString().split("T")[0];
 
-      // Usamos el método de storage
+      // 3. GUARDAR
       const result = await storage.upsertDailyCash(u, {
         date: dateStr,
         amount: parseResult.data.amount
       });
-
+      
       res.json(result);
     } catch (e) {
       console.error("Error guardando caja:", e);
@@ -166,13 +167,9 @@ export async function registerRoutes(server: Server, app: Express) {
   });
   // =========================================================
 
-  // =========================================================
-  // RUTA DASHBOARD
-  // =========================================================
   app.get("/api/stats", async (req, res) => {
     try {
       const userId = await getUserId(req);
-      // Delegamos el cálculo pesado al storage (que ya tiene la lógica de fechas)
       const stats = await storage.getStats(userId);
       res.json(stats);
     } catch (e) {
@@ -180,12 +177,10 @@ export async function registerRoutes(server: Server, app: Express) {
       res.status(500).json({ error: "Error calculando estadísticas" });
     }
   });
-  // =========================================================
 
   app.get("/api/settings", async (req, res) => { try { const u = await getUserId(req); res.json((await storage.getSettings(u)) || {}); } catch (e) { res.status(500).json({ error: "Error" }); } });
   app.post("/api/settings", async (req, res) => { try { const p = insertSettingsSchema.safeParse(req.body); if (!p.success) return res.status(400).json({ error: p.error.errors }); const u = await getUserId(req); res.json(await storage.updateSettings(u, p.data)); } catch (e) { res.status(500).json({ error: "Error" }); } });
 
-  // --- PRODUCTOS ---
   app.get("/api/products", async (req, res) => { try { const u = await getUserId(req); const products = await storage.getProducts(u); res.json(products); } catch (e) { res.status(500).json({ error: "Error" }); } });
 
   app.post("/api/products", async (req, res) => {
@@ -207,21 +202,12 @@ export async function registerRoutes(server: Server, app: Express) {
 
   app.delete("/api/products/:id", async (req, res) => { try { const u = await getUserId(req); await storage.deleteProduct(req.params.id, u); res.sendStatus(204); } catch (e) { res.status(500).json({ error: "Error deleting product" }); } });
 
-  // ---------------------------------------------------------
-  // RUTA UPLOAD
-  // ---------------------------------------------------------
   app.post("/api/upload", upload.single("file"), (req: any, res: any) => {
     try {
-      if (!req.file) {
-        return res.status(400).json({ message: "No se subió ningún archivo" });
-      }
-
-      // Convertir a Base64
+      if (!req.file) return res.status(400).json({ message: "No se subió ningún archivo" });
       const b64 = Buffer.from(req.file.buffer).toString("base64");
       const mimeType = req.file.mimetype;
       const dataURI = `data:${mimeType};base64,${b64}`;
-
-      // Devolver la URL
       res.json({ url: dataURI });
     } catch (error) {
       console.error("Error en upload:", error);
@@ -229,7 +215,6 @@ export async function registerRoutes(server: Server, app: Express) {
     }
   });
 
-  // SUPPORT
   app.post("/api/support", async (req, res) => {
     try {
       const { message, imageUrls } = req.body;

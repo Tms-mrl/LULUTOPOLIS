@@ -1,9 +1,8 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"; // <--- AGREGADO useQueryClient
 import { z } from "zod";
-import { useMutation } from "@tanstack/react-query";
-import { Save, Package } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -11,7 +10,6 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
@@ -20,33 +18,30 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Check, ChevronsUpDown } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { insertProductSchema } from "@shared/schema";
+import { apiRequest } from "@/lib/queryClient"; // <--- QUITAMOS queryClient de aquí
 import { useToast } from "@/hooks/use-toast";
 import type { Product } from "@shared/schema";
 
-const productSchema = z.object({
-  name: z.string().min(1, "Nombre requerido"),
-  sku: z.string().optional(),
-  category: z.string().optional(),
-  cost: z.coerce.number().min(0),
-  price: z.coerce.number().min(0),
-  quantity: z.coerce.number().int().min(0),
-  lowStockThreshold: z.coerce.number().int().min(0),
-  description: z.string().optional(),
-});
-
-type ProductFormValues = z.infer<typeof productSchema>;
-
-const CATEGORIES = ["Repuestos", "Accesorios", "Herramientas", "Servicios", "Otros"];
+const formSchema = insertProductSchema;
 
 interface ProductDialogProps {
   open: boolean;
@@ -56,86 +51,109 @@ interface ProductDialogProps {
 
 export function ProductDialog({ open, onOpenChange, product }: ProductDialogProps) {
   const { toast } = useToast();
-  const isEditing = !!product;
+  const queryClient = useQueryClient(); // <--- OBTENEMOS LA INSTANCIA CORRECTA
+  const [openCategory, setOpenCategory] = useState(false);
 
-  const form = useForm<ProductFormValues>({
-    resolver: zodResolver(productSchema),
+  // 1. OBTENER CATEGORÍAS EXISTENTES
+  const { data: products = [] } = useQuery<Product[]>({
+    queryKey: ["/api/products"],
+    enabled: open,
+  });
+
+  const existingCategories = Array.from(new Set(
+    products.map(p => p.category).filter((c): c is string => !!c)
+  )).sort();
+
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
     defaultValues: {
       name: "",
+      description: "",
       sku: "",
-      category: "Repuestos",
+      category: "",
       cost: 0,
       price: 0,
       quantity: 0,
       lowStockThreshold: 5,
-      description: "",
     },
   });
 
   useEffect(() => {
-    if (product && open) {
+    if (product) {
       form.reset({
-        name: product.name,
-        sku: product.sku || "",
-        category: product.category || "Repuestos",
+        ...product,
         cost: Number(product.cost),
         price: Number(product.price),
-        quantity: product.quantity,
-        lowStockThreshold: product.lowStockThreshold || 5,
         description: product.description || "",
+        sku: product.sku || "",
+        category: product.category || "",
+        lowStockThreshold: product.lowStockThreshold || 5,
       });
-    } else if (!product && open) {
+    } else {
       form.reset({
         name: "",
+        description: "",
         sku: "",
-        category: "Repuestos",
+        category: "",
         cost: 0,
         price: 0,
         quantity: 0,
         lowStockThreshold: 5,
-        description: "",
       });
     }
-  }, [product, open, form]);
+  }, [product, form, open]);
 
   const mutation = useMutation({
-    mutationFn: async (values: ProductFormValues) => {
-      if (isEditing && product) {
-        await apiRequest("PATCH", `/api/products/${product.id}`, values);
+    mutationFn: async (values: z.infer<typeof formSchema>) => {
+      const payload = {
+        ...values,
+        cost: Number(values.cost),
+        price: Number(values.price),
+        quantity: Number(values.quantity),
+        lowStockThreshold: Number(values.lowStockThreshold),
+      };
+
+      if (product) {
+        await apiRequest("PATCH", `/api/products/${product.id}`, payload);
       } else {
-        await apiRequest("POST", "/api/products", values);
+        await apiRequest("POST", "/api/products", payload);
       }
     },
     onSuccess: () => {
+      // ESTA LÍNEA AHORA FUNCIONARÁ PERFECTO:
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      toast({ 
-        title: isEditing ? "Producto actualizado" : "Producto creado", 
-        description: "El inventario se ha actualizado correctamente." 
+
+      toast({
+        title: product ? "Producto actualizado" : "Producto creado",
+        description: `El producto ha sido ${product ? "actualizado" : "creado"} exitosamente.`,
       });
       onOpenChange(false);
     },
     onError: () => {
-      toast({ title: "Error", description: "No se pudo guardar el producto.", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: "Hubo un error al guardar el producto.",
+        variant: "destructive",
+      });
     },
   });
 
+  const onSubmit = (values: z.infer<typeof formSchema>) => {
+    mutation.mutate(values);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] bg-background/95 backdrop-blur-md border-border/50">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-xl">
-            <div className="p-2 bg-primary/10 rounded-full">
-              <Package className="h-5 w-5 text-primary" />
-            </div>
-            {isEditing ? "Editar Producto" : "Nuevo Producto"}
-          </DialogTitle>
+          <DialogTitle>{product ? "Editar Producto" : "Nuevo Producto"}</DialogTitle>
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit((data) => mutation.mutate(data))} className="space-y-5 py-2">
-            
-            {/* Nombre y Categoría */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
+
+            {/* NOMBRE Y SKU */}
+            <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="name"
@@ -143,59 +161,20 @@ export function ProductDialog({ open, onOpenChange, product }: ProductDialogProp
                   <FormItem>
                     <FormLabel>Nombre del Producto *</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="Ej: Pantalla iPhone X" className="bg-muted/50 border-border/50" />
+                      <Input placeholder="Ej: Pantalla iPhone X" {...field} value={field.value ?? ""} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name="category"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Categoría</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="bg-muted/50 border-border/50">
-                          <SelectValue placeholder="Seleccionar..." />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {CATEGORIES.map(cat => (
-                          <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            {/* SKU y Alerta */}
-            <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="sku"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>SKU / Código</FormLabel>
+                    <FormLabel>Código / SKU</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="OPCIONAL" className="font-mono bg-muted/50 border-border/50" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="lowStockThreshold"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Alerta de Stock Mínimo</FormLabel>
-                    <FormControl>
-                      <Input {...field} type="number" className="bg-muted/50 border-border/50" />
+                      <Input placeholder="Ej: P-IPHX-001" {...field} value={field.value ?? ""} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -203,16 +182,101 @@ export function ProductDialog({ open, onOpenChange, product }: ProductDialogProp
               />
             </div>
 
-            {/* Precios y Cantidad */}
-            <div className="grid grid-cols-3 gap-4">
+            {/* --- CATEGORÍA (COMBOBOX CREATIVO) --- */}
+            <FormField
+              control={form.control}
+              name="category"
+              render={({ field }) => (
+                <FormItem className="flex flex-col">
+                  <FormLabel>Categoría</FormLabel>
+                  <Popover open={openCategory} onOpenChange={setOpenCategory}>
+                    <PopoverTrigger asChild>
+                      <FormControl>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={openCategory}
+                          className={cn(
+                            "w-full justify-between",
+                            !field.value && "text-muted-foreground"
+                          )}
+                        >
+                          {field.value
+                            ? field.value
+                            : "Seleccionar o escribir categoría..."}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </FormControl>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[400px] p-0" align="start">
+                      <Command>
+                        <CommandInput
+                          placeholder="Buscar o crear nueva..."
+                        />
+                        <CommandList>
+                          <CommandEmpty>
+                            <p className="p-2 text-sm text-muted-foreground">
+                              ¿No existe? Agrégala abajo:
+                            </p>
+                            <Button
+                              variant="secondary"
+                              className="w-full justify-start h-8 font-normal"
+                              onClick={() => {
+                                const input = document.querySelector('[cmdk-input]') as HTMLInputElement;
+                                if (input?.value) {
+                                  form.setValue("category", input.value);
+                                  setOpenCategory(false);
+                                }
+                              }}
+                            >
+                              + Usar texto escrito
+                            </Button>
+                          </CommandEmpty>
+
+                          <CommandGroup heading="Sugerencias">
+                            {existingCategories.map((category) => (
+                              <CommandItem
+                                key={category}
+                                value={category}
+                                onSelect={(currentValue) => {
+                                  form.setValue("category", currentValue === field.value ? "" : currentValue);
+                                  setOpenCategory(false);
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    field.value === category ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                {category}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* PRECIOS Y STOCK */}
+            <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="cost"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Costo ($)</FormLabel>
+                    <FormLabel>Costo (Compra)</FormLabel>
                     <FormControl>
-                      <Input {...field} type="number" step="0.01" className="bg-muted/50 border-border/50" />
+                      <Input
+                        type="number"
+                        {...field}
+                        value={field.value ?? 0}
+                        onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -223,22 +287,15 @@ export function ProductDialog({ open, onOpenChange, product }: ProductDialogProp
                 name="price"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Venta ($)</FormLabel>
+                    <FormLabel>Precio (Venta)</FormLabel>
                     <FormControl>
-                      <Input {...field} type="number" step="0.01" className="bg-muted/50 border-border/50" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="quantity"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Cantidad</FormLabel>
-                    <FormControl>
-                      <Input {...field} type="number" className="bg-muted/50 border-border/50" />
+                      <Input
+                        type="number"
+                        className="font-bold text-emerald-600"
+                        {...field}
+                        value={field.value ?? 0}
+                        onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -246,18 +303,59 @@ export function ProductDialog({ open, onOpenChange, product }: ProductDialogProp
               />
             </div>
 
-            {/* Detalles / Notas */}
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="quantity"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Cantidad Actual</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        {...field}
+                        value={field.value ?? 0}
+                        onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="lowStockThreshold"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Alerta Stock Bajo</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        {...field}
+                        value={field.value ?? 0}
+                        onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
             <FormField
               control={form.control}
               name="description"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Detalles / Notas Adicionales</FormLabel>
+                  <FormLabel>Descripción / Notas</FormLabel>
                   <FormControl>
-                    <Textarea 
-                      {...field} 
-                      placeholder="Calidad, proveedor, ubicación..." 
-                      className="bg-muted/50 border-border/50 min-h-[80px]" 
+                    <Textarea
+                      placeholder="Detalles adicionales..."
+                      name={field.name}
+                      ref={field.ref}
+                      onBlur={field.onBlur}
+                      onChange={field.onChange}
+                      value={field.value ?? ""}
                     />
                   </FormControl>
                   <FormMessage />
@@ -266,12 +364,11 @@ export function ProductDialog({ open, onOpenChange, product }: ProductDialogProp
             />
 
             <DialogFooter>
-              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={mutation.isPending} className="bg-primary/20 text-primary hover:bg-primary/30 border border-primary/20">
-                <Save className="h-4 w-4 mr-2" />
-                {mutation.isPending ? "Guardando..." : "Guardar Producto"}
+              <Button type="submit" disabled={mutation.isPending}>
+                {mutation.isPending ? "Guardando..." : (product ? "Actualizar" : "Crear")}
               </Button>
             </DialogFooter>
           </form>

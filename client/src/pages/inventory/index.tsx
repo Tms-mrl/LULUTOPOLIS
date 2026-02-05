@@ -1,17 +1,17 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import {
-    Plus,
-    Search,
-    Package,
-    AlertTriangle,
-    Edit,
-    Trash2,
-    FileDown,
-    DollarSign,
-    Boxes,
-    Tag,
-    Pencil
+import { 
+  Plus, 
+  Search, 
+  Package, 
+  AlertTriangle,
+  Edit,
+  Trash2,
+  FileDown, 
+  DollarSign,
+  Boxes,
+  Tag,
+  Pencil
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,22 +19,22 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui/table";
 import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ProductDialog } from "./product-dialog";
 import { ImportDialog } from "./import-dialog";
@@ -58,18 +58,32 @@ export default function InventoryPage() {
 
     // --- CÁLCULOS KPI ---
     const totalUniqueProducts = products.length;
-
+    
     const totalCostValue = products.reduce((acc, product) => acc + (Number(product.cost) * product.quantity), 0);
     const totalSalesValue = products.reduce((acc, product) => acc + (Number(product.price) * product.quantity), 0);
-
+    
     const lowStockCount = products.filter(p => p.quantity <= (p.lowStockThreshold || 0)).length;
 
-    // --- FILTRO ---
-    const filteredProducts = products?.filter((product) =>
-        product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (product.sku || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (product.category || "").toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    // --- FILTRO Y ORDENAMIENTO (AGRUPACIÓN) ---
+    const filteredProducts = products
+        ?.filter((product) =>
+            product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (product.sku || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (product.category || "").toLowerCase().includes(searchTerm.toLowerCase()) // Busca por categoría también
+        )
+        // AQUI ESTA LA MAGIA DEL AGRUPAMIENTO:
+        .sort((a, b) => {
+            // 1. Primero ordenar por Categoría
+            const catA = a.category || "";
+            const catB = b.category || "";
+            const categoryComparison = catA.localeCompare(catB);
+            
+            // Si las categorías son diferentes, devuelve ese orden
+            if (categoryComparison !== 0) return categoryComparison;
+            
+            // 2. Si son la misma categoría, ordenar por Nombre
+            return a.name.localeCompare(b.name);
+        });
 
     const handleCreate = () => {
         setSelectedProduct(undefined);
@@ -122,7 +136,7 @@ export default function InventoryPage() {
 
     return (
         <div className="min-h-screen bg-background/50 pb-20 space-y-8">
-
+            
             {/* --- DIÁLOGOS --- */}
             <ProductDialog
                 open={isProductOpen}
@@ -166,10 +180,10 @@ export default function InventoryPage() {
                             Gestión de stock, productos y precios.
                         </p>
                     </div>
-
+                    
                     <div className="flex items-center gap-3 w-full sm:w-auto">
-                        <Button
-                            variant="outline"
+                        <Button 
+                            variant="outline" 
                             onClick={() => setIsImportOpen(true)}
                             className="bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border-emerald-500/20 hover:border-emerald-500/40 shadow-sm backdrop-blur-sm transition-all"
                         >
@@ -177,7 +191,7 @@ export default function InventoryPage() {
                             Importar Excel
                         </Button>
 
-                        <Button
+                        <Button 
                             onClick={handleCreate}
                             variant="outline"
                             className="bg-primary/10 text-primary hover:bg-primary/20 border-primary/20 hover:border-primary/40 shadow-sm backdrop-blur-sm transition-all"
@@ -193,8 +207,8 @@ export default function InventoryPage() {
 
                 {/* --- KPI CARDS --- */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-
-                    {/* 1. Total Productos (Índigo Glow) */}
+                    
+                    {/* 1. Total Productos */}
                     <Card className="
                         border border-indigo-500/20 hover:border-indigo-500/50
                         bg-gradient-to-br from-card via-card/95 to-indigo-500/10 
@@ -214,7 +228,7 @@ export default function InventoryPage() {
                         </CardContent>
                     </Card>
 
-                    {/* 2. Valor Inventario (Esmeralda Glow - Split) */}
+                    {/* 2. Valor Inventario */}
                     <Card className="
                         group 
                         bg-gradient-to-br from-card via-transparent to-emerald-500/10
@@ -224,11 +238,11 @@ export default function InventoryPage() {
                     ">
                         <div className="absolute inset-0 pointer-events-none">
                             <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
-                                <line
-                                    x1="0" y1="100" x2="100" y2="0"
-                                    vectorEffect="non-scaling-stroke"
-                                    className="stroke-zinc-500/20 group-hover:stroke-emerald-500/50 transition-colors duration-500"
-                                    strokeWidth="1.5"
+                                <line 
+                                    x1="0" y1="100" x2="100" y2="0" 
+                                    vectorEffect="non-scaling-stroke" 
+                                    className="stroke-zinc-500/20 group-hover:stroke-emerald-500/50 transition-colors duration-500" 
+                                    strokeWidth="1.5" 
                                 />
                             </svg>
                         </div>
@@ -255,7 +269,7 @@ export default function InventoryPage() {
                         </CardContent>
                     </Card>
 
-                    {/* 3. Stock Bajo (Naranja Glow) */}
+                    {/* 3. Stock Bajo */}
                     <Card className="
                         border border-orange-500/20 hover:border-orange-500/50
                         bg-gradient-to-br from-card via-card/95 to-orange-500/10 
@@ -301,7 +315,7 @@ export default function InventoryPage() {
                                 </div>
                             ) : filteredProducts?.length === 0 ? (
                                 <div className="text-center py-16 text-muted-foreground flex flex-col items-center gap-3">
-                                    <EmptyState
+                                    <EmptyState 
                                         icon={Package}
                                         title="Sin productos"
                                         description={searchTerm ? "No se encontraron resultados" : "No tienes productos cargados"}
@@ -326,13 +340,13 @@ export default function InventoryPage() {
                                         <TableBody>
                                             {filteredProducts?.map((product) => {
                                                 const isLowStock = product.quantity <= (product.lowStockThreshold || 0);
-
+                                                
                                                 return (
                                                     <TableRow key={product.id} className="hover:bg-muted/30 transition-colors group">
                                                         <TableCell className="font-mono text-xs text-muted-foreground">
                                                             {product.sku || "-"}
                                                         </TableCell>
-
+                                                        
                                                         <TableCell>
                                                             <div className="flex flex-col">
                                                                 <span className="font-medium">{product.name}</span>
@@ -345,9 +359,10 @@ export default function InventoryPage() {
                                                         </TableCell>
 
                                                         <TableCell>
+                                                            {/* Renderizamos la categoría, ahora crucial para el orden */}
                                                             <Badge variant="outline" className="font-normal text-[10px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20 flex w-fit items-center gap-1">
                                                                 <Tag className="h-3 w-3 opacity-70" />
-                                                                {product.category || "General"}
+                                                                {product.category || "Sin Categoría"}
                                                             </Badge>
                                                         </TableCell>
 
@@ -357,7 +372,7 @@ export default function InventoryPage() {
                                                         <TableCell className="text-right font-bold tabular-nums text-sm">
                                                             {formatMoney(Number(product.price))}
                                                         </TableCell>
-
+                                                        
                                                         <TableCell className="text-center">
                                                             <div className="flex items-center justify-center gap-2">
                                                                 {isLowStock ? (

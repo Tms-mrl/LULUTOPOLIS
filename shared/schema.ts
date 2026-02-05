@@ -15,7 +15,7 @@ import { z } from "zod";
 // --------------------------------------------------------------------------
 // 1. CONSTANTES
 // --------------------------------------------------------------------------
-export const orderStatuses = ["recibido", "en_curso", "listo", "entregado"] as const;
+export const orderStatuses = ["presupuesto", "recibido", "en_curso", "listo", "entregado"] as const;
 export type OrderStatus = typeof orderStatuses[number];
 
 export const paymentMethods = ["efectivo", "tarjeta", "transferencia"] as const;

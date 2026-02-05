@@ -11,7 +11,6 @@ import {
   TrendingUp,
   Inbox,
   LayoutDashboard,
-  Pencil,
   Save
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -207,16 +206,12 @@ export default function Dashboard() {
                     }}
                     title="Corregir Caja Inicial"
                   >
-                    <Pencil className="h-3 w-3" />
                   </Button>
                 </CardHeader>
                 <CardContent>
                   <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
                     {formatMoney(initialCash)}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Base del turno
-                  </p>
                 </CardContent>
               </Card>
 
@@ -268,9 +263,6 @@ export default function Dashboard() {
                   <div className={cn("text-3xl font-bold", totalCashInBox >= 0 ? "text-indigo-600 dark:text-indigo-400" : "text-red-500")}>
                     {formatMoney(totalCashInBox)}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    (Inicial + Ingresos - Gastos)
-                  </p>
                 </CardContent>
               </Card>
             </>

@@ -1,8 +1,23 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
-import { Product } from "@shared/schema";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import {
+    Plus,
+    Search,
+    Package,
+    AlertTriangle,
+    Edit,
+    Trash2,
+    FileDown,
+    DollarSign,
+    Boxes,
+    Tag,
+    Pencil
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import {
     Table,
     TableBody,
@@ -11,22 +26,6 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-    Plus,
-    Search,
-    FileDown,
-    Pencil,
-    Trash2,
-    Package,
-    Boxes,
-    AlertTriangle,
-    DollarSign,
-    Tag
-} from "lucide-react";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -37,12 +36,13 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Skeleton } from "@/components/ui/skeleton";
 import { ProductDialog } from "./product-dialog";
 import { ImportDialog } from "./import-dialog";
 import { EmptyState } from "@/components/empty-state";
-// Asumo que este componente existe porque estaba en tu código original
 import { QuickRestockPopover } from "./quick-restock-popover";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import type { Product } from "@shared/schema";
 
 export default function InventoryPage() {
     const [searchTerm, setSearchTerm] = useState("");
@@ -51,7 +51,6 @@ export default function InventoryPage() {
     const [selectedProduct, setSelectedProduct] = useState<Product | undefined>(undefined);
     const [productToDelete, setProductToDelete] = useState<Product | null>(null);
     const { toast } = useToast();
-    const queryClient = useQueryClient();
 
     const { data: products = [], isLoading } = useQuery<Product[]>({
         queryKey: ["/api/products"],
@@ -59,10 +58,14 @@ export default function InventoryPage() {
 
     // --- CÁLCULOS KPI ---
     const totalUniqueProducts = products.length;
-    const totalInventoryValue = products.reduce((acc, product) => acc + (Number(product.cost) * product.quantity), 0);
+
+    // Calculamos Costo Total y Venta Total por separado
+    const totalCostValue = products.reduce((acc, product) => acc + (Number(product.cost) * product.quantity), 0);
+    const totalSalesValue = products.reduce((acc, product) => acc + (Number(product.price) * product.quantity), 0);
+
     const lowStockCount = products.filter(p => p.quantity <= (p.lowStockThreshold || 0)).length;
 
-    // --- FILTRO (Adaptado a la nueva estructura: sin brand/model) ---
+    // --- FILTRO ---
     const filteredProducts = products?.filter((product) =>
         product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (product.sku || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -152,7 +155,7 @@ export default function InventoryPage() {
                 </AlertDialogContent>
             </AlertDialog>
 
-            {/* --- HEADER STICKY "GLASS" --- */}
+            {/* --- HEADER STICKY --- */}
             <div className="sticky top-0 z-30 border-b border-border/40 bg-background/80 backdrop-blur-md px-6 py-4 transition-all">
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4 max-w-7xl mx-auto w-full">
                     <div className="flex flex-col gap-1 w-full sm:w-auto">
@@ -166,7 +169,6 @@ export default function InventoryPage() {
                     </div>
 
                     <div className="flex items-center gap-3 w-full sm:w-auto">
-                        {/* BOTÓN EXCEL (Estilo Original Restaurado) */}
                         <Button
                             variant="outline"
                             onClick={() => setIsImportOpen(true)}
@@ -176,7 +178,6 @@ export default function InventoryPage() {
                             Importar Excel
                         </Button>
 
-                        {/* BOTÓN NUEVO (Estilo Primary Glass) */}
                         <Button
                             onClick={handleCreate}
                             variant="outline"
@@ -191,53 +192,73 @@ export default function InventoryPage() {
 
             <div className="max-w-7xl mx-auto px-4 sm:px-6 w-full space-y-8">
 
-                {/* --- KPI CARDS (ESTILO ORIGINAL RESTAURADO) --- */}
+                {/* --- KPI CARDS --- */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {/* Total Productos (Indigo) */}
+
+                    {/* 1. Total Productos */}
                     <Card className="border-border/50 bg-gradient-to-br from-card via-card/95 to-indigo-500/10 shadow-sm relative overflow-hidden">
                         <div className="absolute right-0 top-0 p-3 opacity-10">
                             <Boxes className="w-24 h-24 text-indigo-500" />
                         </div>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                        <CardContent className="p-6 flex flex-col justify-center h-full">
+                            <div className="text-sm font-medium text-muted-foreground flex items-center gap-2 mb-2">
                                 <Package className="h-4 w-4 text-indigo-500" /> Total Productos
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
+                            </div>
                             <div className="text-3xl font-bold text-indigo-600 dark:text-indigo-400">
                                 {totalUniqueProducts} <span className="text-sm font-normal text-muted-foreground">ítems</span>
                             </div>
                         </CardContent>
                     </Card>
 
-                    {/* Valor Inventario (Verde) */}
-                    <Card className="border-border/50 bg-gradient-to-br from-card via-card/95 to-emerald-500/10 shadow-sm relative overflow-hidden">
-                        <div className="absolute right-0 top-0 p-3 opacity-10">
+                    {/* 2. Valor Inventario (SPLIT DIAGONAL) */}
+                    <Card className="bg-emerald-500/5 border-emerald-500/20 backdrop-blur-md overflow-hidden relative shadow-sm">
+
+                        {/* Línea Diagonal Divisoria */}
+                        <div className="absolute inset-0 pointer-events-none">
+                            <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+                                <line x1="0" y1="100" x2="100" y2="0" vectorEffect="non-scaling-stroke" className="stroke-emerald-500/20" strokeWidth="1.5" />
+                            </svg>
+                        </div>
+
+                        {/* Icono de fondo sutil */}
+                        <div className="absolute right-0 top-0 p-3 opacity-5 pointer-events-none">
                             <DollarSign className="w-24 h-24 text-emerald-500" />
                         </div>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                                <DollarSign className="h-4 w-4 text-emerald-500" /> Valor Inventario (Costo)
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">
-                                {formatMoney(totalInventoryValue)}
+
+                        <CardContent className="p-5 h-full flex flex-col justify-between relative z-10">
+
+                            {/* Superior Izquierda: COSTO */}
+                            <div className="self-start">
+                                <p className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                                    <DollarSign className="h-3 w-3" /> Valor (Costo)
+                                </p>
+                                <h2 className="text-2xl font-bold text-foreground">
+                                    {formatMoney(totalCostValue)}
+                                </h2>
                             </div>
+
+                            {/* Inferior Derecha: VENTA */}
+                            <div className="self-end text-right">
+                                <p className="text-[10px] font-bold text-emerald-600/80 uppercase tracking-wider mb-0.5">
+                                    Valor (Venta)
+                                </p>
+                                <h2 className="text-2xl font-bold text-emerald-500">
+                                    {formatMoney(totalSalesValue)}
+                                </h2>
+                            </div>
+
                         </CardContent>
                     </Card>
 
-                    {/* Stock Bajo (Naranja) */}
+                    {/* 3. Stock Bajo */}
                     <Card className="border-border/50 bg-gradient-to-br from-card via-card/95 to-orange-500/10 shadow-sm relative overflow-hidden">
                         <div className="absolute right-0 top-0 p-3 opacity-10">
                             <AlertTriangle className="w-24 h-24 text-orange-500" />
                         </div>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                        <CardContent className="p-6 flex flex-col justify-center h-full">
+                            <div className="text-sm font-medium text-muted-foreground flex items-center gap-2 mb-2">
                                 <AlertTriangle className="h-4 w-4 text-orange-500" /> Alerta Stock Bajo
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
+                            </div>
                             <div className="text-3xl font-bold text-orange-600 dark:text-orange-400">
                                 {lowStockCount} <span className="text-sm font-normal text-muted-foreground">productos</span>
                             </div>
@@ -298,12 +319,10 @@ export default function InventoryPage() {
 
                                                 return (
                                                     <TableRow key={product.id} className="hover:bg-muted/30 transition-colors group">
-                                                        {/* SKU */}
                                                         <TableCell className="font-mono text-xs text-muted-foreground">
                                                             {product.sku || "-"}
                                                         </TableCell>
 
-                                                        {/* PRODUCTO (Simplificado: Nombre + Descripción) */}
                                                         <TableCell>
                                                             <div className="flex flex-col">
                                                                 <span className="font-medium">{product.name}</span>
@@ -315,7 +334,6 @@ export default function InventoryPage() {
                                                             </div>
                                                         </TableCell>
 
-                                                        {/* CATEGORÍA */}
                                                         <TableCell>
                                                             <Badge variant="outline" className="font-normal text-[10px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20 flex w-fit items-center gap-1">
                                                                 <Tag className="h-3 w-3 opacity-70" />
@@ -330,7 +348,6 @@ export default function InventoryPage() {
                                                             {formatMoney(Number(product.price))}
                                                         </TableCell>
 
-                                                        {/* STOCK + QuickRestock */}
                                                         <TableCell className="text-center">
                                                             <div className="flex items-center justify-center gap-2">
                                                                 {isLowStock ? (
@@ -343,7 +360,6 @@ export default function InventoryPage() {
                                                                         {product.quantity}
                                                                     </span>
                                                                 )}
-                                                                {/* POPUP DE REPOSICIÓN RÁPIDA (Si existe el componente) */}
                                                                 <div className="opacity-0 group-hover:opacity-100 transition-opacity">
                                                                     <QuickRestockPopover product={product} />
                                                                 </div>

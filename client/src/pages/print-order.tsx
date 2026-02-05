@@ -10,6 +10,7 @@ import { useEffect } from "react";
 
 // --- HELPERS ---
 const getFinancials = (order: RepairOrderWithDetails) => {
+    // Si es presupuesto, usamos estimatedCost. Si es orden cerrada, finalCost.
     const totalCost = order.finalCost > 0 ? order.finalCost : order.estimatedCost;
 
     const totalPaid = order.payments?.reduce((sum, p) => {
@@ -26,7 +27,6 @@ const getFinancials = (order: RepairOrderWithDetails) => {
     return { totalCost, totalPaid, balance };
 };
 
-// Helper para obtener SI/NO de la respuesta
 const getCheckValue = (checklist: any, key: string) => {
     const val = checklist?.[key];
     if (val === "yes") return "SI";
@@ -34,28 +34,29 @@ const getCheckValue = (checklist: any, key: string) => {
     return "-";
 };
 
-// Helper para limpiar el texto de la pregunta (quitar signos para ahorrar espacio en la hoja)
 const cleanLabel = (text: string) => {
-    return text.replace(/[¿?]/g, "").substring(0, 10); // Max 10 caracteres
+    return text.replace(/[¿?]/g, "").substring(0, 10);
 };
 
 // ==========================================
-// 1. COPIA DEL TÉCNICO (Parte Superior - 42% Altura)
+// 1. COPIA DEL TÉCNICO
 // ==========================================
 const TechnicianCopy = ({ order, settings }: { order: RepairOrderWithDetails, settings?: Settings }) => {
     const { totalCost, totalPaid, balance } = getFinancials(order);
+    const isBudget = order.status === "presupuesto";
 
-    // Obtenemos las opciones dinámicas O las que tenga la orden guardada
     const checklistItems = settings?.checklistOptions && settings.checklistOptions.length > 0
         ? settings.checklistOptions
         : Object.keys(order.intakeChecklist || {});
 
     return (
         <div className="flex flex-col h-full text-[10px] font-sans text-black leading-tight border-b-2 border-dashed border-gray-400 pb-2">
-            {/* HEADER TÉCNICO */}
+            {/* HEADER */}
             <div className="flex justify-between items-center mb-1 border-b-2 border-black pb-1">
                 <div className="flex items-center gap-2">
-                    <span className="bg-black text-white px-2 py-0.5 font-bold text-xs">COPIA TALLER</span>
+                    <span className={`px-2 py-0.5 font-bold text-xs ${isBudget ? 'bg-black text-white' : 'bg-black text-white'}`}>
+                        {isBudget ? "PRESUPUESTO" : "COPIA TALLER"}
+                    </span>
                     <span className="font-bold text-lg">#{order.id.slice(0, 8).toUpperCase()}</span>
                 </div>
                 <div className="text-[9px]">
@@ -63,9 +64,8 @@ const TechnicianCopy = ({ order, settings }: { order: RepairOrderWithDetails, se
                 </div>
             </div>
 
-            {/* DATOS PRINCIPALES */}
+            {/* DATOS (Igual que antes) */}
             <div className="flex border border-black mb-1">
-                {/* CLIENTE */}
                 <div className="w-1/2 border-r border-black p-1">
                     <div className="font-bold bg-gray-200 px-1 mb-1 text-[9px]">DATOS DEL CLIENTE</div>
                     <div className="grid grid-cols-[45px_1fr] gap-y-0.5">
@@ -74,7 +74,6 @@ const TechnicianCopy = ({ order, settings }: { order: RepairOrderWithDetails, se
                         <span className="font-bold">DNI:</span> <span>{order.client.dni || "-"}</span>
                     </div>
                 </div>
-                {/* EQUIPO */}
                 <div className="w-1/2 p-1">
                     <div className="font-bold bg-gray-200 px-1 mb-1 text-[9px]">DATOS DEL EQUIPO</div>
                     <div className="grid grid-cols-[50px_1fr] gap-y-0.5">
@@ -85,9 +84,8 @@ const TechnicianCopy = ({ order, settings }: { order: RepairOrderWithDetails, se
                 </div>
             </div>
 
-            {/* DETALLES TÉCNICOS (CHECKLIST Y FALLA) */}
+            {/* DETALLES */}
             <div className="flex gap-1 flex-1 min-h-0 mb-1">
-                {/* Checklist Dinámico */}
                 <div className="w-1/3 border border-black text-[9px]">
                     <div className="bg-gray-200 font-bold text-center border-b border-black py-0.5">CHECKLIST</div>
                     <div className="grid grid-cols-2 p-1 gap-x-2 gap-y-0.5">
@@ -104,7 +102,6 @@ const TechnicianCopy = ({ order, settings }: { order: RepairOrderWithDetails, se
                     </div>
                 </div>
 
-                {/* Falla y Obs */}
                 <div className="w-2/3 flex flex-col gap-1">
                     <div className="border border-black flex-1 p-1 overflow-hidden">
                         <span className="font-bold underline text-[9px]">REPARACIÓN SOLICITADA:</span>
@@ -117,11 +114,11 @@ const TechnicianCopy = ({ order, settings }: { order: RepairOrderWithDetails, se
                 </div>
             </div>
 
-            {/* PIE TÉCNICO: PAGOS Y FIRMA */}
+            {/* PIE */}
             <div className="flex items-end gap-2 h-10">
                 <div className="w-3/5 border border-black flex text-xs h-full">
                     <div className="flex-1 border-r border-black flex flex-col justify-center items-center bg-gray-50">
-                        <span className="text-[8px] text-gray-500">TOTAL</span>
+                        <span className="text-[8px] text-gray-500">TOTAL ESTIMADO</span>
                         <span className="font-bold">${totalCost}</span>
                     </div>
                     <div className="flex-1 border-r border-black flex flex-col justify-center items-center bg-gray-50">
@@ -133,19 +130,26 @@ const TechnicianCopy = ({ order, settings }: { order: RepairOrderWithDetails, se
                         <span className="font-bold text-sm">${balance}</span>
                     </div>
                 </div>
-                <div className="w-2/5 border-b border-black text-center pb-0.5">
-                    <span className="text-[7px] font-bold uppercase">Firma Conformidad Cliente</span>
-                </div>
+                {isBudget ? (
+                    <div className="w-2/5 border border-black border-dashed flex items-center justify-center text-center pb-0.5 bg-gray-100">
+                        <span className="text-[9px] font-bold uppercase">PRESUPUESTO - NO VÁLIDO COMO ORDEN</span>
+                    </div>
+                ) : (
+                    <div className="w-2/5 border-b border-black text-center pb-0.5">
+                        <span className="text-[7px] font-bold uppercase">Firma Conformidad Cliente</span>
+                    </div>
+                )}
             </div>
         </div>
     );
 };
 
 // ==========================================
-// 2. COPIA DEL CLIENTE (Parte Inferior - 53% Altura)
+// 2. COPIA DEL CLIENTE
 // ==========================================
 const ClientCopy = ({ order, settings }: { order: RepairOrderWithDetails, settings?: Settings }) => {
     const { totalCost, totalPaid, balance } = getFinancials(order);
+    const isBudget = order.status === "presupuesto";
     const terminos = settings?.receiptDisclaimer || "Sin términos configurados. Configurelos en Ajustes.";
 
     return (
@@ -153,15 +157,11 @@ const ClientCopy = ({ order, settings }: { order: RepairOrderWithDetails, settin
             {/* HEADER NEGOCIO */}
             <div className="flex justify-between items-start mb-2 border-b-2 border-black pb-2">
                 <div className="flex gap-3 items-center">
-                    {/* LOGO */}
                     {settings?.logoUrl ? (
                         <img src={settings.logoUrl} alt="Logo" className="w-12 h-12 object-contain" />
                     ) : (
-                        <div className="w-12 h-12 bg-black text-white rounded-md flex items-center justify-center text-xl font-bold">
-                            GSM
-                        </div>
+                        <div className="w-12 h-12 bg-black text-white rounded-md flex items-center justify-center text-xl font-bold">GSM</div>
                     )}
-
                     <div>
                         <h2 className="font-bold text-lg uppercase leading-none mb-1">{settings?.shopName || "MI TALLER"}</h2>
                         <div className="text-[9px] space-y-0.5 text-gray-700">
@@ -173,16 +173,15 @@ const ClientCopy = ({ order, settings }: { order: RepairOrderWithDetails, settin
                 </div>
                 <div className="text-right">
                     <div className="border border-black px-2 py-1 bg-gray-100 mb-1 inline-block">
-                        <span className="block text-[8px] text-gray-500 text-center">ORDEN N°</span>
+                        <span className="block text-[8px] text-gray-500 text-center">{isBudget ? "PRESUPUESTO" : "ORDEN N°"}</span>
                         <span className="font-bold text-xl block leading-none">#{order.id.slice(0, 8).toUpperCase()}</span>
                     </div>
                     <p className="text-[10px] mt-1">Fecha: <b>{format(new Date(order.createdAt), "dd/MM/yyyy")}</b></p>
                 </div>
             </div>
 
-            {/* CUERPO PRINCIPAL */}
+            {/* CUERPO */}
             <div className="flex gap-3 mb-2">
-                {/* COLUMNA IZQUIERDA: EQUIPO Y PROBLEMA */}
                 <div className="w-2/3 flex flex-col gap-2">
                     <div className="border border-black p-1.5 rounded-sm">
                         <div className="font-bold bg-gray-200 px-1 -mx-1.5 -mt-1.5 mb-1.5 border-b border-black text-[9px] py-0.5">
@@ -202,10 +201,11 @@ const ClientCopy = ({ order, settings }: { order: RepairOrderWithDetails, settin
                     </div>
                 </div>
 
-                {/* COLUMNA DERECHA: FINANZAS */}
                 <div className="w-1/3">
                     <div className="border border-black rounded-sm overflow-hidden h-full flex flex-col">
-                        <div className="bg-black text-white font-bold text-center py-1 text-[10px]">RESUMEN DE PAGO</div>
+                        <div className="bg-black text-white font-bold text-center py-1 text-[10px]">
+                            {isBudget ? "COSTOS ESTIMADOS" : "RESUMEN DE PAGO"}
+                        </div>
                         <div className="p-2 flex-1 flex flex-col justify-center space-y-2 text-right">
                             <div className="flex justify-between border-b border-dashed border-gray-400 pb-1">
                                 <span>Total:</span>
@@ -224,7 +224,7 @@ const ClientCopy = ({ order, settings }: { order: RepairOrderWithDetails, settin
                 </div>
             </div>
 
-            {/* TÉRMINOS Y CONDICIONES */}
+            {/* TÉRMINOS */}
             <div className="flex-1 border-t-2 border-black pt-1 min-h-0 overflow-hidden flex flex-col">
                 <h3 className="font-bold text-[9px] mb-1 underline">TÉRMINOS Y CONDICIONES:</h3>
                 <div className="text-[9px] text-justify leading-snug text-gray-700 whitespace-pre-wrap h-full overflow-hidden">
@@ -232,11 +232,17 @@ const ClientCopy = ({ order, settings }: { order: RepairOrderWithDetails, settin
                 </div>
             </div>
 
-            {/* FIRMA FINAL */}
+            {/* FIRMA */}
             <div className="mt-2 flex justify-end">
-                <div className="w-1/3 border-t border-black text-center pt-1">
-                    <span className="text-[8px] font-bold">FIRMA Y ACLARACIÓN RESPONSABLE</span>
-                </div>
+                {isBudget ? (
+                    <div className="w-1/3 border border-black border-dashed text-center pt-1 bg-gray-100">
+                        <span className="text-[8px] font-bold">VÁLIDO POR 7 DÍAS</span>
+                    </div>
+                ) : (
+                    <div className="w-1/3 border-t border-black text-center pt-1">
+                        <span className="text-[8px] font-bold">FIRMA Y ACLARACIÓN RESPONSABLE</span>
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -256,6 +262,7 @@ export default function OrderPrint() {
         queryKey: ["/api/settings"],
     });
 
+    // Auto-imprimir
     useEffect(() => {
         if (order && settings !== undefined) {
             setTimeout(() => {
@@ -274,33 +281,37 @@ export default function OrderPrint() {
 
     return (
         <div className="min-h-screen bg-slate-100 p-8 print:p-0 print:bg-white font-sans print:overflow-hidden">
-            {/* BOTONES */}
+            {/* BOTONES (No salen en impresión) */}
             <div className="max-w-[210mm] mx-auto mb-6 flex justify-between print:hidden">
-                {/* Forzamos el botón a ser negro con clases de Tailwind para que no dependa del tema oscuro */}
-                <Button
-                    asChild
-                    className="bg-slate-900 text-white hover:bg-slate-800 border-none"
-                >
+                <Button asChild className="bg-slate-900 text-white hover:bg-slate-800 border-none">
                     <Link href={`/ordenes/${orderId}`}>
                         <ArrowLeft className="mr-2 h-4 w-4" />
                         Volver a la Orden
                     </Link>
                 </Button>
 
-                <Button onClick={() => window.print()} className="bg-blue-600 hover:bg-blue-700 text-white">
-                    <Printer className="mr-2 h-4 w-4" />
-                    Imprimir
-                </Button>
+                <div className="flex gap-2">
+                    {order.status === "presupuesto" && (
+                        <div className="bg-amber-100 text-amber-800 px-3 py-2 rounded text-sm font-bold border border-amber-300 flex items-center">
+                            MODO PRESUPUESTO
+                        </div>
+                    )}
+                    <Button onClick={() => window.print()} className="bg-blue-600 hover:bg-blue-700 text-white">
+                        <Printer className="mr-2 h-4 w-4" />
+                        Imprimir
+                    </Button>
+                </div>
             </div>
 
             {/* ÁREA DE IMPRESIÓN */}
             <div id="print-area" className="bg-white w-[210mm] h-[296mm] mx-auto p-[8mm] shadow-lg print:shadow-none print:w-full print:h-[296mm] print:absolute print:top-0 print:left-0 print:m-0 flex flex-col justify-between overflow-hidden box-border">
+                
                 {/* TÉCNICO */}
                 <div className="h-[42%]">
                     <TechnicianCopy order={order} settings={settings} />
                 </div>
 
-                {/* LÍNEA DE CORTE */}
+                {/* CORTE */}
                 <div className="relative py-1 flex items-center justify-center print:py-1 h-[5%]">
                     <div className="absolute w-full border-b-2 border-dashed border-gray-400"></div>
                     <span className="relative bg-white px-2 text-[8px] text-gray-500 font-bold tracking-widest">CORTE AQUÍ</span>
@@ -313,29 +324,14 @@ export default function OrderPrint() {
             </div>
 
             <style>{`
-        @media print {
-          @page { margin: 0; size: A4; }
-          html, body {
-            height: 100%;
-            overflow: hidden;
-          }
-          body * {
-            visibility: hidden;
-          }
-          #print-area, #print-area * {
-            visibility: visible;
-          }
-          #print-area {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 296mm;
-            margin: 0;
-            padding: 8mm;
-          }
-        }
-      `}</style>
+                @media print {
+                    @page { margin: 0; size: A4; }
+                    html, body { height: 100%; overflow: hidden; }
+                    body * { visibility: hidden; }
+                    #print-area, #print-area * { visibility: visible; }
+                    #print-area { position: absolute; left: 0; top: 0; width: 100%; height: 296mm; margin: 0; padding: 8mm; }
+                }
+            `}</style>
         </div>
     );
 }

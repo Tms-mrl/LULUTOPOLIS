@@ -4,34 +4,15 @@ import { es } from "date-fns/locale";
 import { MessageCircle, CheckCircle2, Calendar, User, Smartphone, AlertCircle } from "lucide-react";
 import type { RepairOrderWithDetails } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge"; // <--- Importamos el componente unificado
 
 interface OrderCardProps {
   order: RepairOrderWithDetails;
-  paymentStatus?: "paid" | "partial" | "unpaid" | null; 
+  paymentStatus?: "paid" | "partial" | "unpaid" | null;
   className?: string;
 }
 
 export function OrderCard({ order, paymentStatus, className }: OrderCardProps) {
-  
-  const getStatusStyles = (status: string) => {
-    switch (status) {
-      case 'recibido': return 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20';
-      case 'en_curso': return 'bg-amber-500/10 text-amber-400 border-amber-500/20';
-      case 'listo': return 'bg-green-500/10 text-green-400 border-green-500/20';
-      case 'entregado': return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
-      default: return 'bg-zinc-500/10 text-zinc-400';
-    }
-  };
-
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'recibido': return 'Recibido';
-      case 'en_curso': return 'En Curso';
-      case 'listo': return 'Listo';
-      case 'entregado': return 'Entregado';
-      default: return status;
-    }
-  };
 
   const openWhatsApp = (e: React.MouseEvent, phone: string | null | undefined) => {
     e.preventDefault();
@@ -45,42 +26,42 @@ export function OrderCard({ order, paymentStatus, className }: OrderCardProps) {
     <Link href={`/ordenes/${order.id}`}>
       <div className={`
         group relative overflow-hidden rounded-xl border border-border/50 
-        
-        /* --- AQUÍ ESTÁ EL CAMBIO DE COLOR --- */
-        /* Hacemos que el índigo sea más visible en la esquina (30% opacidad) y más brillante (800) */
         bg-gradient-to-br from-card via-card/70 to-indigo-800/30
         hover:to-indigo-800/40 backdrop-blur-sm 
-        
         hover:border-indigo-500/50 cursor-pointer 
         hover:shadow-[0_0_20px_-5px_rgba(99,102,241,0.25)] 
         transition-all duration-300
         flex flex-col
         ${className}
       `}>
-        
-        {/* Decoración lateral brillante al hover (Índigo más intenso) */}
+
+        {/* Decoración lateral brillante al hover */}
         <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-indigo-500/0 via-indigo-500 to-indigo-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
         <div className="p-4 space-y-3 relative z-10 flex-1 flex flex-col">
           {/* Header */}
           <div className="flex justify-between items-start gap-2">
             <div className="flex items-center gap-2 overflow-hidden">
-                <Smartphone className="h-4 w-4 text-indigo-500/80 shrink-0" />
-                <h3 className="font-bold text-sm tracking-tight truncate text-foreground group-hover:text-indigo-400 transition-colors capitalize">
+              <Smartphone className="h-4 w-4 text-indigo-500/80 shrink-0" />
+              <h3 className="font-bold text-sm tracking-tight truncate text-foreground group-hover:text-indigo-400 transition-colors capitalize">
                 {order.device.brand} {order.device.model}
-                </h3>
+              </h3>
             </div>
-            
+
             <div className="flex gap-1 shrink-0">
-                {order.priority === "urgente" && (
-                    <Badge variant="destructive" className="text-[10px] h-5 px-1.5 shadow-none">
-                        <AlertCircle className="h-3 w-3 mr-1" />
-                        !
-                    </Badge>
-                )}
-                <Badge variant="outline" className={`text-[10px] px-2 py-0.5 uppercase font-bold tracking-wider shadow-none ${getStatusStyles(order.status)}`}>
-                {getStatusLabel(order.status)}
+              {order.priority === "urgente" && (
+                <Badge variant="destructive" className="text-[10px] h-5 px-1.5 shadow-none">
+                  <AlertCircle className="h-3 w-3 mr-1" />
+                  !
                 </Badge>
+              )}
+
+              {/* --- USANDO EL COMPONENTE CON COLORES UNIFICADOS --- */}
+              <StatusBadge
+                status={order.status}
+                showIcon={false}
+                className="text-[10px] px-2 py-0.5 uppercase font-bold tracking-wider shadow-none"
+              />
             </div>
           </div>
 
@@ -91,7 +72,7 @@ export function OrderCard({ order, paymentStatus, className }: OrderCardProps) {
                 <User className="h-3.5 w-3.5 opacity-70" />
                 <span>{order.client.name}</span>
               </div>
-              
+
               {order.client.phone && (
                 <div
                   role="button"
@@ -109,7 +90,7 @@ export function OrderCard({ order, paymentStatus, className }: OrderCardProps) {
                 </div>
               )}
             </div>
-            
+
             <p className="text-xs text-muted-foreground/70 line-clamp-2 pl-2 border-l-2 border-indigo-500/30 italic">
               {order.problem}
             </p>

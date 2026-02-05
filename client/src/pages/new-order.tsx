@@ -4,7 +4,10 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ArrowLeft, User, MapPin, Phone, Mail, FileText, StickyNote, UserPlus, Search, Check, ChevronsUpDown, Smartphone } from "lucide-react";
+import {
+  ArrowLeft, User, MapPin, Phone, Mail, FileText, StickyNote, UserPlus,
+  Check, ChevronsUpDown, Printer
+} from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -13,24 +16,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
 } from "@/components/ui/command";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
+  Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -44,30 +36,19 @@ export default function NewOrder() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
 
-  // Estados para modales y UI
   const [showNewDevice, setShowNewDevice] = useState(false);
   const [showNewClient, setShowNewClient] = useState(false);
   const [openClientCombobox, setOpenClientCombobox] = useState(false);
-
   const [selectedClientId, setSelectedClientId] = useState("");
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
 
-  // Queries
-  const { data: clients } = useQuery<Client[]>({
-    queryKey: ["/api/clients"],
-  });
-
+  const { data: clients } = useQuery<Client[]>({ queryKey: ["/api/clients"] });
   const { data: devices } = useQuery<Device[]>({
     queryKey: ["/api/devices", selectedClientId],
     enabled: !!selectedClientId,
   });
+  const { data: settings } = useQuery<Settings>({ queryKey: ["/api/settings"] });
 
-  // Query para el checklist dinámico
-  const { data: settings } = useQuery<Settings>({
-    queryKey: ["/api/settings"],
-  });
-
-  // Forms
   const form = useForm<OrderFormValues>({
     resolver: zodResolver(orderFormSchema),
     defaultValues: {
@@ -86,28 +67,14 @@ export default function NewOrder() {
   const deviceForm = useForm<NewDeviceValues>({
     resolver: zodResolver(newDeviceSchema),
     defaultValues: {
-      brand: "",
-      model: "",
-      imei: "",
-      serialNumber: "",
-      color: "",
-      condition: "Bueno",
-      lockType: "" as any,
-      lockValue: "",
+      brand: "", model: "", imei: "", serialNumber: "", color: "", condition: "Bueno", lockType: "" as any, lockValue: "",
     },
   });
 
-  // Estado para el formulario del nuevo cliente
   const [newClientData, setNewClientData] = useState({
-    name: "",
-    phone: "",
-    email: "",
-    dni: "",
-    address: "",
-    notes: ""
+    name: "", phone: "", email: "", dni: "", address: "", notes: ""
   });
 
-  // Resetear checklist al cambiar selección
   useEffect(() => {
     form.resetField("intakeChecklist");
   }, [selectedClientId, selectedDeviceId, form]);
@@ -128,17 +95,12 @@ export default function NewOrder() {
       setNewClientData({ name: "", phone: "", email: "", dni: "", address: "", notes: "" });
       toast({ title: "Cliente creado y seleccionado" });
     },
-    onError: () => {
-      toast({ title: "Error al crear cliente", variant: "destructive" });
-    }
+    onError: () => { toast({ title: "Error al crear cliente", variant: "destructive" }); }
   });
 
   const createDevice = useMutation({
     mutationFn: async (data: z.infer<typeof newDeviceSchema>) => {
-      const res = await apiRequest("POST", "/api/devices", {
-        ...data,
-        clientId: selectedClientId,
-      });
+      const res = await apiRequest("POST", "/api/devices", { ...data, clientId: selectedClientId });
       return res.json();
     },
     onSuccess: (newDevice: Device) => {
@@ -146,50 +108,50 @@ export default function NewOrder() {
       form.setValue("deviceId", newDevice.id);
       setSelectedDeviceId(newDevice.id);
       setShowNewDevice(false);
-      deviceForm.reset({
-        brand: "",
-        model: "",
-        imei: "",
-        serialNumber: "",
-        color: "",
-        condition: "Bueno",
-        lockType: "" as any,
-        lockValue: "",
-      });
+      deviceForm.reset({ brand: "", model: "", imei: "", serialNumber: "", color: "", condition: "Bueno", lockType: "" as any, lockValue: "" });
       toast({ title: "Dispositivo agregado" });
     },
   });
 
+  // UNIFICAMOS LA CREACIÓN DE ORDEN
   const createOrder = useMutation({
-    mutationFn: async (data: z.infer<typeof orderFormSchema>) => {
+    mutationFn: async ({ data, status }: { data: z.infer<typeof orderFormSchema>, status: string }) => {
       const res = await apiRequest("POST", "/api/orders", {
         ...data,
-        status: "recibido",
+        status: status, // Aquí pasamos 'recibido' o 'presupuesto'
         diagnosis: "",
         solution: "",
         finalCost: 0,
       });
       return res.json();
     },
-    // --- CAMBIO CLAVE AQUÍ: Recibimos la nueva orden y redirigimos a su ID ---
     onSuccess: (newOrder: RepairOrder) => {
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
-      toast({ title: "Orden creada exitosamente" });
 
-      // Redirección directa al detalle de la nueva orden
-      navigate(`/ordenes/${newOrder.id}`);
+      const isBudget = newOrder.status === "presupuesto";
+      toast({ title: isBudget ? "Presupuesto guardado" : "Orden creada exitosamente" });
+
+      if (isBudget) {
+        // Si es presupuesto, vamos directo a imprimir en pestaña nueva y luego al detalle
+        window.open(`/ordenes/${newOrder.id}/print`, "_blank");
+        navigate(`/ordenes/${newOrder.id}`);
+      } else {
+        navigate(`/ordenes/${newOrder.id}`);
+      }
     },
     onError: () => {
-      toast({ title: "Error al crear la orden", variant: "destructive" });
+      toast({ title: "Error al guardar", variant: "destructive" });
     },
   });
 
-  const onSubmit = form.handleSubmit((data) => {
-    createOrder.mutate(data as unknown as z.infer<typeof orderFormSchema>);
-  });
+  // Manejador genérico para los botones
+  const handleSave = (status: "recibido" | "presupuesto") => {
+    form.handleSubmit((data) => {
+      createOrder.mutate({ data: data as unknown as z.infer<typeof orderFormSchema>, status });
+    })();
+  };
 
-  // Lista de fallback si settings tarda en cargar
   const checklistItems = settings?.checklistOptions && settings.checklistOptions.length > 0
     ? settings.checklistOptions
     : ["¿Carga?", "¿Enciende?", "¿Golpeado?", "¿Mojado?", "¿Abierto previamente?", "¿En garantía?", "¿Micro SD?", "¿Porta SIM?", "¿Tarjeta SIM?"];
@@ -198,29 +160,23 @@ export default function NewOrder() {
     <div className="space-y-6">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" asChild data-testid="button-back">
-          <Link href="/ordenes">
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
+          <Link href="/ordenes"><ArrowLeft className="h-5 w-5" /></Link>
         </Button>
         <div>
-          <h1 className="text-2xl font-semibold">Nueva Orden de Reparación</h1>
-          <p className="text-muted-foreground">Registra una nueva reparación</p>
+          <h1 className="text-2xl font-semibold">Nueva Orden</h1>
+          <p className="text-muted-foreground">Registra una reparación o presupuesto</p>
         </div>
       </div>
 
       <Form {...form}>
-        <form onSubmit={onSubmit} className="space-y-6">
+        <form className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
             {/* SELECCIÓN DE CLIENTE */}
             <div className="p-4 border rounded-lg bg-card text-card-foreground shadow-sm space-y-3">
               <div className="flex items-center gap-2">
-                <div className="p-1.5 bg-primary/10 rounded-full">
-                  <User className="h-4 w-4 text-primary" />
-                </div>
+                <div className="p-1.5 bg-primary/10 rounded-full"><User className="h-4 w-4 text-primary" /></div>
                 <h3 className="font-semibold text-lg">Cliente</h3>
               </div>
-
               <div className="flex gap-2 items-end">
                 <div className="flex-1">
                   <FormField
@@ -236,14 +192,9 @@ export default function NewOrder() {
                                 variant="outline"
                                 role="combobox"
                                 aria-expanded={openClientCombobox}
-                                className={cn(
-                                  "w-full justify-between",
-                                  !field.value && "text-muted-foreground"
-                                )}
+                                className={cn("w-full justify-between", !field.value && "text-muted-foreground")}
                               >
-                                {field.value
-                                  ? clients?.find((client) => client.id === field.value)?.name
-                                  : "Buscar cliente..."}
+                                {field.value ? clients?.find((client) => client.id === field.value)?.name : "Buscar cliente..."}
                                 <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                               </Button>
                             </FormControl>
@@ -266,12 +217,7 @@ export default function NewOrder() {
                                         setOpenClientCombobox(false);
                                       }}
                                     >
-                                      <Check
-                                        className={cn(
-                                          "mr-2 h-4 w-4",
-                                          client.id === field.value ? "opacity-100" : "opacity-0"
-                                        )}
-                                      />
+                                      <Check className={cn("mr-2 h-4 w-4", client.id === field.value ? "opacity-100" : "opacity-0")} />
                                       <div className="flex flex-col">
                                         <span>{client.name}</span>
                                         <span className="text-xs text-muted-foreground">{client.phone}</span>
@@ -288,15 +234,7 @@ export default function NewOrder() {
                     )}
                   />
                 </div>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setShowNewClient(true)}
-                  title="Crear Nuevo Cliente"
-                  className="mb-[2px]"
-                >
+                <Button type="button" variant="outline" size="icon" onClick={() => setShowNewClient(true)} title="Crear Nuevo Cliente" className="mb-[2px]">
                   <UserPlus className="h-5 w-5" />
                 </Button>
               </div>
@@ -317,7 +255,7 @@ export default function NewOrder() {
 
           <OrderDetails form={form} />
 
-          {/* CHECKLIST DE RECEPCIÓN DINÁMICO */}
+          {/* CHECKLIST */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Checklist de Recepción</CardTitle>
@@ -335,37 +273,16 @@ export default function NewOrder() {
                         <FormControl>
                           <RadioGroup
                             onValueChange={field.onChange}
-                            // Usamos "key" para forzar re-render si cambia el valor a null
                             key={field.value}
-                            value={field.value || ""} // Si es null, pasamos string vacío para que no marque nada
+                            value={field.value || ""}
                             className="flex space-x-4"
                           >
                             <div className="flex items-center space-x-2">
-                              <RadioGroupItem
-                                value="yes"
-                                id={`${index}-yes`}
-                                // TRUCO PARA DESMARCAR:
-                                onClick={(e) => {
-                                  if (field.value === "yes") {
-                                    e.preventDefault(); // Evita el comportamiento nativo de "mantener seleccionado"
-                                    field.onChange(null); // Borra el valor
-                                  }
-                                }}
-                              />
+                              <RadioGroupItem value="yes" id={`${index}-yes`} onClick={(e) => { if (field.value === "yes") { e.preventDefault(); field.onChange(null); } }} />
                               <label htmlFor={`${index}-yes`} className="font-normal cursor-pointer text-sm">Sí</label>
                             </div>
                             <div className="flex items-center space-x-2">
-                              <RadioGroupItem
-                                value="no"
-                                id={`${index}-no`}
-                                // TRUCO PARA DESMARCAR:
-                                onClick={(e) => {
-                                  if (field.value === "no") {
-                                    e.preventDefault();
-                                    field.onChange(null);
-                                  }
-                                }}
-                              />
+                              <RadioGroupItem value="no" id={`${index}-no`} onClick={(e) => { if (field.value === "no") { e.preventDefault(); field.onChange(null); } }} />
                               <label htmlFor={`${index}-no`} className="font-normal cursor-pointer text-sm">No</label>
                             </div>
                           </RadioGroup>
@@ -382,113 +299,92 @@ export default function NewOrder() {
             <Button variant="outline" asChild>
               <Link href="/ordenes">Cancelar</Link>
             </Button>
-            <Button type="submit" disabled={createOrder.isPending} data-testid="button-submit-order">
+
+            {/* BOTÓN PRESUPUESTO */}
+            <Button
+              type="button"
+              variant="secondary"
+              className="bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 border-amber-500/20 border"
+              onClick={() => handleSave("presupuesto")} // <-- Guarda como presupuesto
+              disabled={createOrder.isPending}
+            >
+              <Printer className="mr-2 h-4 w-4" />
+              Guardar Presupuesto
+            </Button>
+
+            {/* BOTÓN CREAR ORDEN */}
+            <Button
+              type="button"
+              onClick={() => handleSave("recibido")} // <-- Guarda como recibido
+              disabled={createOrder.isPending}
+            >
               {createOrder.isPending ? "Creando..." : "Crear Orden"}
             </Button>
           </div>
         </form>
       </Form>
 
-      {/* --- MODAL CREAR CLIENTE --- */}
+      {/* MODAL CLIENTE */}
       <Dialog open={showNewClient} onOpenChange={setShowNewClient}>
         <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader>
-            <DialogTitle>Nuevo Cliente</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Nuevo Cliente</DialogTitle></DialogHeader>
           <div className="grid gap-4 py-4">
+            {/* ... (Formulario Cliente igual al anterior) ... */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Nombre Completo *</label>
                 <div className="relative">
                   <User className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    className="pl-9"
-                    value={newClientData.name}
-                    onChange={(e) => setNewClientData({ ...newClientData, name: e.target.value })}
-                    placeholder="Ej: Juan Pérez"
-                  />
+                  <Input className="pl-9" value={newClientData.name} onChange={(e) => setNewClientData({ ...newClientData, name: e.target.value })} placeholder="Ej: Juan Pérez" />
                 </div>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Teléfono *</label>
                 <div className="relative">
                   <Phone className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    className="pl-9"
-                    value={newClientData.phone}
-                    onChange={(e) => setNewClientData({ ...newClientData, phone: e.target.value })}
-                    placeholder="Ej: 11 1234 5678"
-                  />
+                  <Input className="pl-9" value={newClientData.phone} onChange={(e) => setNewClientData({ ...newClientData, phone: e.target.value })} placeholder="Ej: 11 1234 5678" />
                 </div>
               </div>
             </div>
-
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Email</label>
                 <div className="relative">
                   <Mail className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    type="email"
-                    className="pl-9"
-                    value={newClientData.email}
-                    onChange={(e) => setNewClientData({ ...newClientData, email: e.target.value })}
-                    placeholder="cliente@email.com"
-                  />
+                  <Input type="email" className="pl-9" value={newClientData.email} onChange={(e) => setNewClientData({ ...newClientData, email: e.target.value })} placeholder="cliente@email.com" />
                 </div>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">DNI / Documento</label>
                 <div className="relative">
                   <FileText className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    className="pl-9"
-                    value={newClientData.dni}
-                    onChange={(e) => setNewClientData({ ...newClientData, dni: e.target.value })}
-                    placeholder="DNI"
-                  />
+                  <Input className="pl-9" value={newClientData.dni} onChange={(e) => setNewClientData({ ...newClientData, dni: e.target.value })} placeholder="DNI" />
                 </div>
               </div>
             </div>
-
             <div className="space-y-2">
               <label className="text-sm font-medium">Dirección</label>
               <div className="relative">
                 <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  className="pl-9"
-                  value={newClientData.address}
-                  onChange={(e) => setNewClientData({ ...newClientData, address: e.target.value })}
-                  placeholder="Calle 123, Ciudad"
-                />
+                <Input className="pl-9" value={newClientData.address} onChange={(e) => setNewClientData({ ...newClientData, address: e.target.value })} placeholder="Calle 123, Ciudad" />
               </div>
             </div>
-
             <div className="space-y-2">
               <label className="text-sm font-medium">Notas / ¿Quién retira?</label>
               <div className="relative">
                 <StickyNote className="absolute left-2.5 top-3 h-4 w-4 text-muted-foreground" />
-                <Textarea
-                  className="pl-9 min-h-[80px]"
-                  value={newClientData.notes}
-                  onChange={(e) => setNewClientData({ ...newClientData, notes: e.target.value })}
-                  placeholder="Notas adicionales sobre el cliente..."
-                />
+                <Textarea className="pl-9 min-h-[80px]" value={newClientData.notes} onChange={(e) => setNewClientData({ ...newClientData, notes: e.target.value })} placeholder="Notas adicionales sobre el cliente..." />
               </div>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowNewClient(false)}>Cancelar</Button>
-            <Button
-              onClick={() => createClient.mutate()}
-              disabled={!newClientData.name || !newClientData.phone || createClient.isPending}
-            >
+            <Button onClick={() => createClient.mutate()} disabled={!newClientData.name || !newClientData.phone || createClient.isPending}>
               {createClient.isPending ? "Guardando..." : "Guardar y Seleccionar"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
     </div>
   );
 }

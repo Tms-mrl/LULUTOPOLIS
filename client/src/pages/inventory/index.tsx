@@ -59,7 +59,6 @@ export default function InventoryPage() {
     // --- CÁLCULOS KPI ---
     const totalUniqueProducts = products.length;
 
-    // Calculamos Costo Total y Venta Total por separado
     const totalCostValue = products.reduce((acc, product) => acc + (Number(product.cost) * product.quantity), 0);
     const totalSalesValue = products.reduce((acc, product) => acc + (Number(product.price) * product.quantity), 0);
 
@@ -195,8 +194,13 @@ export default function InventoryPage() {
                 {/* --- KPI CARDS --- */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
-                    {/* 1. Total Productos */}
-                    <Card className="border-border/50 bg-gradient-to-br from-card via-card/95 to-indigo-500/10 shadow-sm relative overflow-hidden">
+                    {/* 1. Total Productos (Índigo Glow) */}
+                    <Card className="
+                        border border-indigo-500/20 hover:border-indigo-500/50
+                        bg-gradient-to-br from-card via-card/95 to-indigo-500/10 
+                        shadow-sm relative overflow-hidden
+                        transition-all duration-500
+                    ">
                         <div className="absolute right-0 top-0 p-3 opacity-10">
                             <Boxes className="w-24 h-24 text-indigo-500" />
                         </div>
@@ -210,48 +214,54 @@ export default function InventoryPage() {
                         </CardContent>
                     </Card>
 
-                    {/* 2. Valor Inventario (SPLIT DIAGONAL) */}
-                    <Card className="bg-emerald-500/5 border-emerald-500/20 backdrop-blur-md overflow-hidden relative shadow-sm">
-
-                        {/* Línea Diagonal Divisoria */}
+                    {/* 2. Valor Inventario (Esmeralda Glow - Split) */}
+                    <Card className="
+                        group 
+                        bg-gradient-to-br from-card via-transparent to-emerald-500/10
+                        border border-zinc-500/20 hover:border-emerald-500/50
+                        backdrop-blur-md overflow-hidden relative shadow-sm
+                        transition-all duration-500
+                    ">
                         <div className="absolute inset-0 pointer-events-none">
                             <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
-                                <line x1="0" y1="100" x2="100" y2="0" vectorEffect="non-scaling-stroke" className="stroke-emerald-500/20" strokeWidth="1.5" />
+                                <line
+                                    x1="0" y1="100" x2="100" y2="0"
+                                    vectorEffect="non-scaling-stroke"
+                                    className="stroke-zinc-500/20 group-hover:stroke-emerald-500/50 transition-colors duration-500"
+                                    strokeWidth="1.5"
+                                />
                             </svg>
                         </div>
-
-                        {/* Icono de fondo sutil */}
                         <div className="absolute right-0 top-0 p-3 opacity-5 pointer-events-none">
                             <DollarSign className="w-24 h-24 text-emerald-500" />
                         </div>
-
                         <CardContent className="p-5 h-full flex flex-col justify-between relative z-10">
-
-                            {/* Superior Izquierda: COSTO */}
                             <div className="self-start">
-                                <p className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                                <p className="text-[10px] font-bold text-muted-foreground/90 uppercase tracking-wider mb-0.5 flex items-center gap-1">
                                     <DollarSign className="h-3 w-3" /> Valor (Costo)
                                 </p>
                                 <h2 className="text-2xl font-bold text-foreground">
                                     {formatMoney(totalCostValue)}
                                 </h2>
                             </div>
-
-                            {/* Inferior Derecha: VENTA */}
                             <div className="self-end text-right">
-                                <p className="text-[10px] font-bold text-emerald-600/80 uppercase tracking-wider mb-0.5">
+                                <p className="text-[10px] font-bold text-emerald-600/90 uppercase tracking-wider mb-0.5">
                                     Valor (Venta)
                                 </p>
                                 <h2 className="text-2xl font-bold text-emerald-500">
                                     {formatMoney(totalSalesValue)}
                                 </h2>
                             </div>
-
                         </CardContent>
                     </Card>
 
-                    {/* 3. Stock Bajo */}
-                    <Card className="border-border/50 bg-gradient-to-br from-card via-card/95 to-orange-500/10 shadow-sm relative overflow-hidden">
+                    {/* 3. Stock Bajo (Naranja Glow) */}
+                    <Card className="
+                        border border-orange-500/20 hover:border-orange-500/50
+                        bg-gradient-to-br from-card via-card/95 to-orange-500/10 
+                        shadow-sm relative overflow-hidden
+                        transition-all duration-500
+                    ">
                         <div className="absolute right-0 top-0 p-3 opacity-10">
                             <AlertTriangle className="w-24 h-24 text-orange-500" />
                         </div>

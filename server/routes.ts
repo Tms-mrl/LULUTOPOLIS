@@ -24,6 +24,29 @@ const supabaseUrl = process.env.SUPABASE_URL || "";
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+// --- HELPER: CALCULAR FECHA DE CAJA (ARGENTINA + CUTOFF) ---
+// Esta función asegura que el Backend use EXACTAMENTE la misma lógica que el Dashboard
+const getShiftDate = (settings: any): string => {
+  const cutoffHour = Number(settings?.dayCutoffHour ?? 0);
+
+  const now = new Date();
+  // 1. Forzamos la hora a Argentina (UTC-3) manualmente para el cálculo
+  //    (Restamos 3 horas a la hora UTC actual)
+  now.setUTCHours(now.getUTCHours() - 3);
+
+  // 2. Obtenemos la hora "actual" en Argentina (0-23)
+  const currentHourArg = now.getUTCHours();
+
+  // 3. Si la hora actual es menor al corte, pertenece al día anterior
+  //    (Ej: Son las 02:00 AM y el corte es a las 04:00 AM -> Es parte de la caja de ayer)
+  if (currentHourArg < cutoffHour) {
+    now.setDate(now.getDate() - 1);
+  }
+
+  // 4. Devolvemos YYYY-MM-DD
+  return now.toISOString().split("T")[0];
+};
+
 export async function registerRoutes(server: Server, app: Express) {
   const getUserId = async (req: Request): Promise<string> => {
     const GUEST_ID = "guest-user-no-access";
@@ -72,7 +95,6 @@ export async function registerRoutes(server: Server, app: Express) {
   app.get("/api/devices/:clientId", async (req, res) => { try { res.json(await storage.getDevicesByClient(req.params.clientId)); } catch (e) { res.status(500).json({ error: "Error" }); } });
   app.post("/api/devices", async (req, res) => { try { const p = insertDeviceSchema.safeParse(req.body); if (!p.success) return res.status(400).json({ error: p.error.errors }); const u = await getUserId(req); res.status(201).json(await storage.createDevice({ ...p.data, userId: u, user_id: u } as any)); } catch (e) { res.status(500).json({ error: "Error" }); } });
 
-  // NUEVA RUTA: PATCH DEVICE (Para editar dispositivo)
   app.patch("/api/devices/:id", async (req, res) => {
     try {
       const u = await getUserId(req);
@@ -133,22 +155,16 @@ export async function registerRoutes(server: Server, app: Express) {
   });
 
   // =========================================================
-  // GESTIÓN DE CAJA INICIAL (DINÁMICA + FIX ZONA HORARIA)
+  // GESTIÓN DE CAJA INICIAL (CORREGIDO)
   // =========================================================
 
   app.get("/api/cash/today", async (req, res) => {
     try {
       const u = await getUserId(req);
       const settings = await storage.getSettings(u);
-      const cutoffHour = Number((settings as any)?.dayCutoffHour ?? 0);
 
-      const now = new Date();
-      now.setUTCHours(now.getUTCHours() - 3); // Fix Argentina
-
-      if (now.getHours() < cutoffHour) {
-        now.setDate(now.getDate() - 1);
-      }
-      const dateStr = now.toISOString().split("T")[0];
+      // Usamos el helper para calcular la fecha correcta
+      const dateStr = getShiftDate(settings);
 
       const result = await storage.getDailyCash(u, dateStr);
       res.json({ amount: result ? result.amount : null });
@@ -168,15 +184,9 @@ export async function registerRoutes(server: Server, app: Express) {
       }
 
       const settings = await storage.getSettings(u);
-      const cutoffHour = Number((settings as any)?.dayCutoffHour ?? 0);
 
-      const now = new Date();
-      now.setUTCHours(now.getUTCHours() - 3); // Fix Argentina
-
-      if (now.getHours() < cutoffHour) {
-        now.setDate(now.getDate() - 1);
-      }
-      const dateStr = now.toISOString().split("T")[0];
+      // Usamos el helper para calcular la fecha correcta (igual que en el GET)
+      const dateStr = getShiftDate(settings);
 
       const result = await storage.upsertDailyCash(u, {
         date: dateStr,

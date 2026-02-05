@@ -20,16 +20,19 @@ export interface IStorage {
   getClient(id: string): Promise<Client | undefined>;
   createClient(client: InsertClient & { userId: string }): Promise<Client>;
   updateClient(id: string, data: Partial<InsertClient>): Promise<Client | undefined>;
+  deleteClient(id: string, userId: string): Promise<void>;
 
   getDevices(userId: string): Promise<Device[]>;
   getDevicesByClient(clientId: string): Promise<Device[]>;
   createDevice(device: InsertDevice & { userId: string }): Promise<Device>;
-  updateDevice(id: string, data: Partial<InsertDevice>): Promise<Device | undefined>;
+  // FIX: Agregamos userId al updateDevice para seguridad
+  updateDevice(id: string, data: Partial<InsertDevice>, userId: string): Promise<Device | undefined>;
 
   getOrdersWithDetails(userId: string): Promise<RepairOrderWithDetails[]>;
   getOrderWithDetails(id: string): Promise<RepairOrderWithDetails | undefined>;
   createOrder(order: InsertRepairOrder & { userId: string }): Promise<RepairOrder>;
   updateOrder(id: string, data: Partial<InsertRepairOrder>): Promise<RepairOrder | undefined>;
+  deleteOrder(id: string, userId: string): Promise<void>;
 
   getPaymentsWithOrders(userId: string): Promise<(Payment & { order?: RepairOrder })[]>;
   createPayment(payment: InsertPayment & { userId: string, items: PaymentItem[] }): Promise<Payment>;
@@ -232,6 +235,11 @@ export class SupabaseStorage implements IStorage {
     return this.mapClient(data);
   }
 
+  async deleteClient(id: string, userId: string): Promise<void> {
+    const { error } = await supabase.from("clients").delete().eq("id", id).eq("user_id", userId);
+    if (error) throw error;
+  }
+
   async getDevices(userId: string): Promise<Device[]> {
     const { data } = await supabase.from("devices").select("*").eq("user_id", userId);
     return (data || []).map(this.mapDevice);
@@ -265,10 +273,41 @@ export class SupabaseStorage implements IStorage {
     return this.mapDevice(data);
   }
 
-  async updateDevice(id: string, data: Partial<InsertDevice>): Promise<Device | undefined> {
-    const { data: res } = await supabase.from("devices").update(data as any).eq("id", id).select().single();
+  // --- FIX COMPLETO PARA UPDATE DEVICE ---
+  async updateDevice(id: string, data: Partial<InsertDevice>, userId: string): Promise<Device | undefined> {
+    // Usamos 'any' para evitar que Typescript bloquee las claves camelCase del frontend
+    const input = data as any;
+    const payload: any = {};
+
+    // Mapeo explícito
+    if (input.brand !== undefined) payload.brand = input.brand;
+    if (input.model !== undefined) payload.model = input.model;
+    if (input.imei !== undefined) payload.imei = input.imei;
+    if (input.serialNumber !== undefined) payload.serial_number = input.serialNumber;
+    if (input.color !== undefined) payload.color = input.color;
+    if (input.condition !== undefined) payload.condition = input.condition;
+    if (input.lockType !== undefined) payload.lock_type = input.lockType;
+    if (input.lockValue !== undefined) payload.lock_value = input.lockValue;
+
+    console.log("🛠️ Intentando actualizar dispositivo:", id, payload);
+
+    // Agregamos filtro por user_id para seguridad y asegurarnos que RLS o lógica coincida
+    const { data: res, error } = await supabase
+      .from("devices")
+      .update(payload)
+      .eq("id", id)
+      .eq("user_id", userId) // Seguridad extra
+      .select()
+      .single();
+
+    if (error) {
+      console.error("❌ Error en updateDevice:", error);
+      return undefined;
+    }
+
     return res ? this.mapDevice(res) : undefined;
   }
+  // ----------------------------------------
 
   async getOrdersWithDetails(userId: string): Promise<RepairOrderWithDetails[]> {
     const { data } = await supabase
@@ -331,6 +370,14 @@ export class SupabaseStorage implements IStorage {
     const { data, error } = await supabase.from("repair_orders").update(payload).eq("id", id).select().single();
     if (error) return undefined;
     return this.mapOrder(data);
+  }
+
+  async deleteOrder(id: string, userId: string): Promise<void> {
+    // 1. Borrar pagos asociados para no romper FK
+    await supabase.from("payments").delete().eq("order_id", id);
+    // 2. Borrar orden
+    const { error } = await supabase.from("repair_orders").delete().eq("id", id).eq("user_id", userId);
+    if (error) throw error;
   }
 
   async getPaymentsWithOrders(userId: string): Promise<(Payment & { order?: RepairOrder })[]> {
@@ -523,8 +570,6 @@ export class SupabaseStorage implements IStorage {
     };
   }
 
-  // --- CORRECCIÓN EN PRODUCTOS (INCLUIR NUEVOS CAMPOS) ---
-
   async getProducts(userId: string): Promise<Product[]> {
     const { data } = await supabase.from("products").select("*").eq("user_id", userId).order("name");
     return (data || []).map(p => ({
@@ -555,7 +600,7 @@ export class SupabaseStorage implements IStorage {
       price: product.price.toString(),
       cost: product.cost.toString(),
       category: product.category,
-      low_stock_threshold: product.lowStockThreshold, // CORREGIDO AQUÍ (lowStockThreshold en vez de low_stock_threshold)
+      low_stock_threshold: product.lowStockThreshold,
       brand: product.brand,
       model: product.model,
       quality: product.quality,
@@ -589,7 +634,7 @@ export class SupabaseStorage implements IStorage {
     if (product.quantity !== undefined) payload.quantity = product.quantity;
     if (product.price !== undefined) payload.price = product.price.toString();
     if (product.cost !== undefined) payload.cost = product.cost.toString();
-    if (product.category !== undefined) payload.category = product.category; // Faltaba category
+    if (product.category !== undefined) payload.category = product.category;
     if (product.lowStockThreshold !== undefined) payload.low_stock_threshold = product.lowStockThreshold;
 
     if (product.brand !== undefined) payload.brand = product.brand;

@@ -13,7 +13,9 @@ import {
   Plus,
   MessageCircle,
   Lock,
-  Unlock
+  Unlock,
+  Trash2,
+  Pencil // <-- Importado
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,6 +30,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { StatusBadge } from "@/components/status-badge";
 import { PatternLock } from "@/components/ui/pattern-lock";
 import { useToast } from "@/hooks/use-toast";
@@ -36,6 +48,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import type { RepairOrderWithDetails, OrderStatus, Payment, Settings } from "@shared/schema";
 import { PaymentDialog } from "@/components/payment-dialog";
+import { DeviceDialog } from "@/components/orders/device-dialog"; // <-- Importado
 
 const statusOptions: { value: OrderStatus; label: string }[] = [
   { value: "recibido", label: "Recibido" },
@@ -51,6 +64,8 @@ export default function OrderDetail() {
   const orderId = params?.id;
 
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeviceDialogOpen, setIsDeviceDialogOpen] = useState(false); // Estado del pop-up de dispositivo
 
   // 1. QUERY DE LA ORDEN
   const { data: order, isLoading } = useQuery<RepairOrderWithDetails>({
@@ -82,6 +97,19 @@ export default function OrderDetail() {
     onError: () => {
       toast({ title: "Error al actualizar", variant: "destructive" });
     },
+  });
+
+  const deleteOrder = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/orders/${orderId}`);
+    },
+    onSuccess: () => {
+      toast({ title: "Orden eliminada", description: "La orden ha sido borrada correctamente." });
+      navigate("/ordenes");
+    },
+    onError: () => {
+      toast({ title: "Error al eliminar", description: "No se pudo eliminar la orden.", variant: "destructive" });
+    }
   });
 
   const openWhatsApp = (e: React.MouseEvent, phone: string | null | undefined) => {
@@ -139,15 +167,13 @@ export default function OrderDetail() {
   const isCostDefined = totalCost > 0;
   const balance = Math.max(0, totalCost - totalPaid);
 
-  // --- FUNCIÓN DE GUARDADO MANUAL ---
   const handleSave = () => {
     updateOrder.mutate(formData);
   };
 
-  // --- FUNCIÓN DE GUARDADO AL DAR ENTER ---
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
-      e.currentTarget.blur(); // Quita el foco para mejorar la UX visual
+      e.currentTarget.blur();
       handleSave();
     }
   };
@@ -164,6 +190,36 @@ export default function OrderDetail() {
           queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
         }}
       />
+
+      {/* DIÁLOGO EDICIÓN DISPOSITIVO */}
+      {order.device && (
+        <DeviceDialog
+          open={isDeviceDialogOpen}
+          onOpenChange={setIsDeviceDialogOpen}
+          device={order.device}
+        />
+      )}
+
+      {/* DIÁLOGO BORRAR ORDEN */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción no se puede deshacer. Se eliminará permanentemente la orden y todos los pagos asociados a ella.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteOrder.mutate()}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {deleteOrder.isPending ? "Eliminando..." : "Eliminar Orden"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-4">
@@ -185,6 +241,17 @@ export default function OrderDetail() {
           </div>
         </div>
         <div className="flex gap-2">
+          {/* BOTÓN ELIMINAR */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-muted-foreground hover:text-red-600 hover:bg-red-100"
+            onClick={() => setIsDeleteDialogOpen(true)}
+            title="Eliminar Orden"
+          >
+            <Trash2 className="h-5 w-5" />
+          </Button>
+
           <Button variant="outline" size="sm" asChild>
             <Link href={`/ordenes/${orderId}/print`}>
               <Printer className="h-4 w-4 mr-2" />
@@ -219,7 +286,6 @@ export default function OrderDetail() {
                       const newStatus = value as OrderStatus;
                       const newData = { ...formData, status: newStatus };
                       setFormData(newData);
-                      // --- AUTO-SAVE AL CAMBIAR ESTADO ---
                       updateOrder.mutate(newData);
                     }}
                   >
@@ -240,7 +306,7 @@ export default function OrderDetail() {
                   <Input
                     value={currentData.technicianName || ""}
                     onChange={(e) => setFormData({ ...formData, technicianName: e.target.value })}
-                    onKeyDown={handleKeyDown} // <-- AUTO-SAVE CON ENTER
+                    onKeyDown={handleKeyDown}
                     placeholder="Nombre del técnico"
                     data-testid="input-technician"
                   />
@@ -315,7 +381,7 @@ export default function OrderDetail() {
                     type="number"
                     value={currentData.estimatedCost}
                     onChange={(e) => setFormData({ ...formData, estimatedCost: parseFloat(e.target.value) || 0 })}
-                    onKeyDown={handleKeyDown} // <-- AUTO-SAVE CON ENTER
+                    onKeyDown={handleKeyDown}
                     min="0"
                     step="0.01"
                     data-testid="input-estimated-cost"
@@ -327,7 +393,7 @@ export default function OrderDetail() {
                     type="number"
                     value={currentData.finalCost}
                     onChange={(e) => setFormData({ ...formData, finalCost: parseFloat(e.target.value) || 0 })}
-                    onKeyDown={handleKeyDown} // <-- AUTO-SAVE CON ENTER
+                    onKeyDown={handleKeyDown}
                     min="0"
                     step="0.01"
                     data-testid="input-final-cost"
@@ -396,7 +462,6 @@ export default function OrderDetail() {
         </div>
 
         <div className="space-y-6">
-          {/* TARJETA DE CLIENTE */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
@@ -432,15 +497,26 @@ export default function OrderDetail() {
             </CardContent>
           </Card>
 
-          {/* TARJETA DE DISPOSITIVO */}
+          {/* TARJETA DE DISPOSITIVO (MODIFICADA CON BOTÓN EDITAR) */}
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-base flex items-center gap-2">
                 <Smartphone className="h-4 w-4" />
                 Dispositivo
               </CardTitle>
+              {/* BOTÓN EDITAR DISPOSITIVO */}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 text-muted-foreground hover:text-primary"
+                onClick={() => setIsDeviceDialogOpen(true)}
+                title="Editar Dispositivo"
+              >
+                <Pencil className="h-3 w-3 mr-1" />
+                Editar
+              </Button>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 pt-4">
               <div>
                 <p className="text-sm text-muted-foreground">Marca / Modelo</p>
                 <p className="font-medium text-base">{order.device.brand} {order.device.model}</p>

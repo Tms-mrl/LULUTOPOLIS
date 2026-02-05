@@ -1,15 +1,15 @@
 import type { Express, Request } from "express";
 import { type Server } from "http";
 import { storage } from "./storage";
-import { 
-  insertRepairOrderSchema, 
-  insertClientSchema, 
-  insertDeviceSchema, 
-  insertPaymentSchema, 
-  insertSettingsSchema, 
-  insertProductSchema, 
+import {
+  insertRepairOrderSchema,
+  insertClientSchema,
+  insertDeviceSchema,
+  insertPaymentSchema,
+  insertSettingsSchema,
+  insertProductSchema,
   insertExpenseSchema,
-  insertDailyCashSchema 
+  insertDailyCashSchema
 } from "@shared/schema";
 import { createClient } from "@supabase/supabase-js";
 import multer from "multer";
@@ -56,16 +56,50 @@ export async function registerRoutes(server: Server, app: Express) {
     } catch (e) { res.status(500).json({ error: "Internal Server Error" }); }
   });
   app.patch("/api/clients/:id", async (req, res) => { try { const u = await storage.updateClient(req.params.id, req.body); if (!u) return res.status(404).json({ error: "Not found" }); res.json(u); } catch (e) { res.status(500).json({ error: "Error" }); } });
+  app.delete("/api/clients/:id", async (req, res) => {
+    try {
+      const u = await getUserId(req);
+      await storage.deleteClient(req.params.id, u);
+      res.sendStatus(204);
+    } catch (e) {
+      console.error("Error deleting client:", e);
+      res.status(500).json({ error: "Error deleting client" });
+    }
+  });
 
+  // --- DEVICES ---
   app.get("/api/devices", async (req, res) => { try { const u = await getUserId(req); res.json(await storage.getDevices(u)); } catch (e) { res.status(500).json({ error: "Error" }); } });
   app.get("/api/devices/:clientId", async (req, res) => { try { res.json(await storage.getDevicesByClient(req.params.clientId)); } catch (e) { res.status(500).json({ error: "Error" }); } });
   app.post("/api/devices", async (req, res) => { try { const p = insertDeviceSchema.safeParse(req.body); if (!p.success) return res.status(400).json({ error: p.error.errors }); const u = await getUserId(req); res.status(201).json(await storage.createDevice({ ...p.data, userId: u, user_id: u } as any)); } catch (e) { res.status(500).json({ error: "Error" }); } });
+
+  // NUEVA RUTA: PATCH DEVICE (Para editar dispositivo)
+  app.patch("/api/devices/:id", async (req, res) => {
+    try {
+      const u = await getUserId(req);
+      const updated = await storage.updateDevice(req.params.id, req.body, u);
+      if (!updated) return res.status(404).json({ error: "Not found" });
+      res.json(updated);
+    } catch (e) {
+      console.error("Route error updating device:", e);
+      res.status(500).json({ error: "Error updating device" });
+    }
+  });
 
   app.get("/api/orders", async (req, res) => { try { const u = await getUserId(req); res.json(await storage.getOrdersWithDetails(u)); } catch (e) { res.status(500).json({ error: "Error" }); } });
   app.get("/api/orders/recent", async (req, res) => { try { const u = await getUserId(req); const o = await storage.getOrdersWithDetails(u); res.json(o.slice(0, 5)); } catch (e) { res.status(500).json({ error: "Error" }); } });
   app.get("/api/orders/:id", async (req, res) => { try { const o = await storage.getOrderWithDetails(req.params.id); if (!o) return res.status(404).json({ error: "Not found" }); res.json(o); } catch (e) { res.status(500).json({ error: "Error" }); } });
   app.post("/api/orders", async (req, res) => { try { const p = insertRepairOrderSchema.safeParse(req.body); if (!p.success) return res.status(400).json({ error: p.error.errors }); const u = await getUserId(req); res.status(201).json(await storage.createOrder({ ...p.data, userId: u, user_id: u } as any)); } catch (e) { res.status(500).json({ error: "Error" }); } });
   app.patch("/api/orders/:id", async (req, res) => { try { const u = await storage.updateOrder(req.params.id, req.body); if (!u) return res.status(404).json({ error: "Not found" }); res.json(u); } catch (e) { res.status(500).json({ error: "Error" }); } });
+  app.delete("/api/orders/:id", async (req, res) => {
+    try {
+      const u = await getUserId(req);
+      await storage.deleteOrder(req.params.id, u);
+      res.sendStatus(204);
+    } catch (e) {
+      console.error("Error deleting order:", e);
+      res.status(500).json({ error: "Error deleting order" });
+    }
+  });
 
   app.get("/api/payments", async (req, res) => { try { const u = await getUserId(req); res.json(await storage.getPaymentsWithOrders(u)); } catch (e) { res.status(500).json({ error: "Error" }); } });
   app.post("/api/payments", async (req, res) => {
@@ -101,28 +135,21 @@ export async function registerRoutes(server: Server, app: Express) {
   // =========================================================
   // GESTIÓN DE CAJA INICIAL (DINÁMICA + FIX ZONA HORARIA)
   // =========================================================
-  
+
   app.get("/api/cash/today", async (req, res) => {
     try {
       const u = await getUserId(req);
-      
-      // 1. LEER CONFIGURACIÓN DEL USUARIO (Aquí tomamos tu botón de cierre)
       const settings = await storage.getSettings(u);
       const cutoffHour = Number((settings as any)?.dayCutoffHour ?? 0);
-      
-      // 2. CALCULAR FECHA LÓGICA (Ajustada a Argentina -3h)
-      const now = new Date();
-      now.setUTCHours(now.getUTCHours() - 3); // Restamos 3hs al servidor UTC
 
-      // Si la hora actual (ya ajustada) es menor al cierre, seguimos en "ayer"
+      const now = new Date();
+      now.setUTCHours(now.getUTCHours() - 3); // Fix Argentina
+
       if (now.getHours() < cutoffHour) {
         now.setDate(now.getDate() - 1);
       }
-      
-      // Formato YYYY-MM-DD
       const dateStr = now.toISOString().split("T")[0];
 
-      // 3. BUSCAR EN STORAGE
       const result = await storage.getDailyCash(u, dateStr);
       res.json({ amount: result ? result.amount : null });
     } catch (e) {
@@ -135,16 +162,14 @@ export async function registerRoutes(server: Server, app: Express) {
     try {
       const u = await getUserId(req);
       const parseResult = insertDailyCashSchema.pick({ amount: true }).safeParse(req.body);
-      
+
       if (!parseResult.success) {
         return res.status(400).json({ error: parseResult.error.errors });
       }
 
-      // 1. LEER CONFIGURACIÓN (Mismo proceso para guardar en la fecha correcta)
       const settings = await storage.getSettings(u);
       const cutoffHour = Number((settings as any)?.dayCutoffHour ?? 0);
-      
-      // 2. CALCULAR FECHA LÓGICA
+
       const now = new Date();
       now.setUTCHours(now.getUTCHours() - 3); // Fix Argentina
 
@@ -153,12 +178,11 @@ export async function registerRoutes(server: Server, app: Express) {
       }
       const dateStr = now.toISOString().split("T")[0];
 
-      // 3. GUARDAR
       const result = await storage.upsertDailyCash(u, {
         date: dateStr,
         amount: parseResult.data.amount
       });
-      
+
       res.json(result);
     } catch (e) {
       console.error("Error guardando caja:", e);

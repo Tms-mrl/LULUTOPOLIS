@@ -1,340 +1,282 @@
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { insertProductSchema, type InsertProduct, type Product } from "@shared/schema";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { z } from "zod";
+import { useMutation } from "@tanstack/react-query";
+import { Save, Package } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { useEffect } from "react";
+import type { Product } from "@shared/schema";
+
+const productSchema = z.object({
+  name: z.string().min(1, "Nombre requerido"),
+  sku: z.string().optional(),
+  category: z.string().optional(),
+  cost: z.coerce.number().min(0),
+  price: z.coerce.number().min(0),
+  quantity: z.coerce.number().int().min(0),
+  lowStockThreshold: z.coerce.number().int().min(0),
+  description: z.string().optional(),
+});
+
+type ProductFormValues = z.infer<typeof productSchema>;
+
+const CATEGORIES = ["Repuestos", "Accesorios", "Herramientas", "Servicios", "Otros"];
 
 interface ProductDialogProps {
-    open: boolean;
-    onOpenChange: (open: boolean) => void;
-    product?: Product | null; // If null, creating new
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  product?: Product;
 }
 
 export function ProductDialog({ open, onOpenChange, product }: ProductDialogProps) {
-    const { toast } = useToast();
-    const queryClient = useQueryClient();
-    const isEditing = !!product;
+  const { toast } = useToast();
+  const isEditing = !!product;
 
-    const form = useForm<InsertProduct>({
-        resolver: zodResolver(insertProductSchema),
-        defaultValues: {
-            name: "",
-            description: "",
-            sku: "",
-            category: "",
-            quantity: 0,
-            cost: 0,
-            price: 0,
-            lowStockThreshold: 5,
-            brand: "",
-            model: "",
-            quality: "",
-            detail: "",
-        },
-    });
+  const form = useForm<ProductFormValues>({
+    resolver: zodResolver(productSchema),
+    defaultValues: {
+      name: "",
+      sku: "",
+      category: "Repuestos",
+      cost: 0,
+      price: 0,
+      quantity: 0,
+      lowStockThreshold: 5,
+      description: "",
+    },
+  });
 
-    useEffect(() => {
-        if (product) {
-            form.reset({
-                name: product.name,
-                description: product.description || "",
-                sku: product.sku || "",
-                category: product.category || "",
-                quantity: product.quantity ?? 0,
-                cost: Number(product.cost) ?? 0,
-                price: Number(product.price) ?? 0,
-                lowStockThreshold: product.lowStockThreshold ?? 5,
-                brand: product.brand || "",
-                model: product.model || "",
-                quality: product.quality || "",
-                detail: product.detail || "",
-            });
-        } else {
-            form.reset({
-                name: "",
-                description: "",
-                sku: "",
-                category: "",
-                quantity: 0,
-                cost: 0,
-                price: 0,
-                lowStockThreshold: 5,
-                brand: "",
-                model: "",
-                quality: "",
-                detail: "",
-            });
-        }
-    }, [product, form, open]);
-
-    const mutation = useMutation({
-        mutationFn: async (data: InsertProduct) => {
-            const payload = {
-                ...data,
-                quantity: Number(data.quantity),
-                cost: Number(data.cost),
-                price: Number(data.price),
-                lowStockThreshold: Number(data.lowStockThreshold),
-            };
-
-            if (isEditing) {
-                return apiRequest("PATCH", `/api/products/${product.id}`, payload);
-            } else {
-                return apiRequest("POST", "/api/products", payload);
-            }
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-            toast({
-                title: isEditing ? "Producto actualizado" : "Producto creado",
-                description: isEditing
-                    ? "El producto se ha actualizado correctamente."
-                    : "El nuevo producto se ha agregado al inventario.",
-            });
-            onOpenChange(false);
-        },
-        onError: (error) => {
-            toast({
-                title: "Error",
-                description: "Hubo un error al guardar el producto.",
-                variant: "destructive",
-            });
-        },
-    });
-
-    function onSubmit(data: InsertProduct) {
-        mutation.mutate(data);
+  useEffect(() => {
+    if (product && open) {
+      form.reset({
+        name: product.name,
+        sku: product.sku || "",
+        category: product.category || "Repuestos",
+        cost: Number(product.cost),
+        price: Number(product.price),
+        quantity: product.quantity,
+        lowStockThreshold: product.lowStockThreshold || 5,
+        description: product.description || "",
+      });
+    } else if (!product && open) {
+      form.reset({
+        name: "",
+        sku: "",
+        category: "Repuestos",
+        cost: 0,
+        price: 0,
+        quantity: 0,
+        lowStockThreshold: 5,
+        description: "",
+      });
     }
+  }, [product, open, form]);
 
-    return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                    <DialogTitle>{isEditing ? "Editar Producto" : "Nuevo Producto"}</DialogTitle>
-                </DialogHeader>
+  const mutation = useMutation({
+    mutationFn: async (values: ProductFormValues) => {
+      if (isEditing && product) {
+        await apiRequest("PATCH", `/api/products/${product.id}`, values);
+      } else {
+        await apiRequest("POST", "/api/products", values);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      toast({ 
+        title: isEditing ? "Producto actualizado" : "Producto creado", 
+        description: "El inventario se ha actualizado correctamente." 
+      });
+      onOpenChange(false);
+    },
+    onError: () => {
+      toast({ title: "Error", description: "No se pudo guardar el producto.", variant: "destructive" });
+    },
+  });
 
-                <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                            {/* Nombre - Ocupa todo el ancho */}
-                            <FormField
-                                control={form.control}
-                                name="name"
-                                render={({ field }) => (
-                                    <FormItem className="col-span-2">
-                                        <FormLabel>Nombre del Producto</FormLabel>
-                                        <FormControl>
-                                            <Input placeholder="Ej: Pantalla iPhone 11" {...field} value={field.value || ""} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[600px] bg-background/95 backdrop-blur-md border-border/50">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-xl">
+            <div className="p-2 bg-primary/10 rounded-full">
+              <Package className="h-5 w-5 text-primary" />
+            </div>
+            {isEditing ? "Editar Producto" : "Nuevo Producto"}
+          </DialogTitle>
+        </DialogHeader>
 
-                            {/* SKU y Categoría */}
-                            <FormField
-                                control={form.control}
-                                name="sku"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>SKU / Código</FormLabel>
-                                        <FormControl>
-                                            <Input placeholder="IP11-PANT-ORIG" {...field} value={field.value || ""} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit((data) => mutation.mutate(data))} className="space-y-5 py-2">
+            
+            {/* Nombre y Categoría */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nombre del Producto *</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="Ej: Pantalla iPhone X" className="bg-muted/50 border-border/50" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="category"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Categoría</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger className="bg-muted/50 border-border/50">
+                          <SelectValue placeholder="Seleccionar..." />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {CATEGORIES.map(cat => (
+                          <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
-                            <FormField
-                                control={form.control}
-                                name="category"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Categoría</FormLabel>
-                                        <FormControl>
-                                            <Input placeholder="Repuestos" {...field} value={field.value || ""} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
+            {/* SKU y Alerta */}
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="sku"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>SKU / Código</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="OPCIONAL" className="font-mono bg-muted/50 border-border/50" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="lowStockThreshold"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Alerta de Stock Mínimo</FormLabel>
+                    <FormControl>
+                      <Input {...field} type="number" className="bg-muted/50 border-border/50" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
-                            {/* --- NUEVOS CAMPOS --- */}
-                            <FormField
-                                control={form.control}
-                                name="brand"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Marca</FormLabel>
-                                        <FormControl>
-                                            <Input placeholder="Ej: Apple" {...field} value={field.value || ""} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
+            {/* Precios y Cantidad */}
+            <div className="grid grid-cols-3 gap-4">
+              <FormField
+                control={form.control}
+                name="cost"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Costo ($)</FormLabel>
+                    <FormControl>
+                      <Input {...field} type="number" step="0.01" className="bg-muted/50 border-border/50" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="price"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Venta ($)</FormLabel>
+                    <FormControl>
+                      <Input {...field} type="number" step="0.01" className="bg-muted/50 border-border/50" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="quantity"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Cantidad</FormLabel>
+                    <FormControl>
+                      <Input {...field} type="number" className="bg-muted/50 border-border/50" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
-                            <FormField
-                                control={form.control}
-                                name="model"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Modelo</FormLabel>
-                                        <FormControl>
-                                            <Input placeholder="Ej: iPhone 11" {...field} value={field.value || ""} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
+            {/* Detalles / Notas */}
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Detalles / Notas Adicionales</FormLabel>
+                  <FormControl>
+                    <Textarea 
+                      {...field} 
+                      placeholder="Calidad, proveedor, ubicación..." 
+                      className="bg-muted/50 border-border/50 min-h-[80px]" 
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-                            <FormField
-                                control={form.control}
-                                name="quality"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Calidad</FormLabel>
-                                        <FormControl>
-                                            <Input placeholder="Ej: Original / OLED" {...field} value={field.value || ""} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-
-                            <FormField
-                                control={form.control}
-                                name="detail"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Detalle / Color</FormLabel>
-                                        <FormControl>
-                                            <Input placeholder="Ej: Negro" {...field} value={field.value || ""} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-
-                            {/* Stock y Alertas */}
-                            <FormField
-                                control={form.control}
-                                name="quantity"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Cantidad Actual</FormLabel>
-                                        <FormControl>
-                                            <Input
-                                                type="number"
-                                                {...field}
-                                                // CORRECCIÓN: Aseguramos que nunca sea null
-                                                value={field.value ?? 0}
-                                                onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
-                                            />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-
-                            <FormField
-                                control={form.control}
-                                name="lowStockThreshold"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Alerta Bajo Stock</FormLabel>
-                                        <FormControl>
-                                            <Input
-                                                type="number"
-                                                {...field}
-                                                // CORRECCIÓN: Aseguramos que nunca sea null
-                                                value={field.value ?? 0}
-                                                onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
-                                            />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-
-                            {/* Costos y Precios */}
-                            <FormField
-                                control={form.control}
-                                name="cost"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Costo de Compra</FormLabel>
-                                        <FormControl>
-                                            <Input
-                                                type="number"
-                                                step="0.01"
-                                                {...field}
-                                                // CORRECCIÓN: Aseguramos que nunca sea null
-                                                value={field.value ?? 0}
-                                                onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                                            />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-
-                            <FormField
-                                control={form.control}
-                                name="price"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Precio de Venta</FormLabel>
-                                        <FormControl>
-                                            <Input
-                                                type="number"
-                                                step="0.01"
-                                                {...field}
-                                                // CORRECCIÓN: Aseguramos que nunca sea null
-                                                value={field.value ?? 0}
-                                                onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                                            />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-
-                            {/* Descripción - Ocupa todo el ancho */}
-                            <FormField
-                                control={form.control}
-                                name="description"
-                                render={({ field }) => (
-                                    <FormItem className="col-span-2">
-                                        <FormLabel>Descripción / Notas Adicionales</FormLabel>
-                                        <FormControl>
-                                            <Textarea placeholder="Detalles adicionales..." {...field} value={field.value || ""} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                        </div>
-
-                        <DialogFooter>
-                            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                                Cancelar
-                            </Button>
-                            <Button type="submit" disabled={mutation.isPending}>
-                                {mutation.isPending ? "Guardando..." : isEditing ? "Actualizar" : "Crear"}
-                            </Button>
-                        </DialogFooter>
-                    </form>
-                </Form>
-            </DialogContent>
-        </Dialog>
-    );
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={mutation.isPending} className="bg-primary/20 text-primary hover:bg-primary/30 border border-primary/20">
+                <Save className="h-4 w-4 mr-2" />
+                {mutation.isPending ? "Guardando..." : "Guardar Producto"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
 }

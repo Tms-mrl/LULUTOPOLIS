@@ -15,15 +15,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { 
-    Plus, 
-    Search, 
-    FileDown, 
-    Pencil, 
-    Trash2, 
-    Package, 
-    Boxes, 
-    AlertTriangle, 
+import {
+    Plus,
+    Search,
+    FileDown,
+    Pencil,
+    Trash2,
+    Package,
+    Boxes,
+    AlertTriangle,
     DollarSign,
     Tag
 } from "lucide-react";
@@ -40,14 +40,15 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { ProductDialog } from "./product-dialog";
 import { ImportDialog } from "./import-dialog";
+import { EmptyState } from "@/components/empty-state";
+// Asumo que este componente existe porque estaba en tu código original
 import { QuickRestockPopover } from "./quick-restock-popover";
-import { cn } from "@/lib/utils";
 
 export default function InventoryPage() {
     const [searchTerm, setSearchTerm] = useState("");
     const [isProductOpen, setIsProductOpen] = useState(false);
     const [isImportOpen, setIsImportOpen] = useState(false);
-    const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+    const [selectedProduct, setSelectedProduct] = useState<Product | undefined>(undefined);
     const [productToDelete, setProductToDelete] = useState<Product | null>(null);
     const { toast } = useToast();
     const queryClient = useQueryClient();
@@ -61,21 +62,25 @@ export default function InventoryPage() {
     const totalInventoryValue = products.reduce((acc, product) => acc + (Number(product.cost) * product.quantity), 0);
     const lowStockCount = products.filter(p => p.quantity <= (p.lowStockThreshold || 0)).length;
 
+    // --- FILTRO (Adaptado a la nueva estructura: sin brand/model) ---
     const filteredProducts = products?.filter((product) =>
         product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (product.sku || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (product.brand || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (product.model || "").toLowerCase().includes(searchTerm.toLowerCase())
+        (product.category || "").toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     const handleCreate = () => {
-        setSelectedProduct(null);
+        setSelectedProduct(undefined);
         setIsProductOpen(true);
     };
 
     const handleEdit = (product: Product) => {
         setSelectedProduct(product);
         setIsProductOpen(true);
+    };
+
+    const handleDeleteClick = (product: Product) => {
+        setProductToDelete(product);
     };
 
     const deleteProductMutation = useMutation({
@@ -99,10 +104,6 @@ export default function InventoryPage() {
         },
     });
 
-    const handleDeleteClick = (product: Product) => {
-        setProductToDelete(product);
-    };
-
     const confirmDelete = () => {
         if (productToDelete) {
             deleteProductMutation.mutate(productToDelete.id);
@@ -119,7 +120,38 @@ export default function InventoryPage() {
 
     return (
         <div className="min-h-screen bg-background/50 pb-20 space-y-8">
-            
+
+            {/* --- DIÁLOGOS --- */}
+            <ProductDialog
+                open={isProductOpen}
+                onOpenChange={setIsProductOpen}
+                product={selectedProduct}
+            />
+
+            <ImportDialog
+                open={isImportOpen}
+                onOpenChange={setIsImportOpen}
+            />
+
+            <AlertDialog open={!!productToDelete} onOpenChange={(open) => !open && setProductToDelete(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Esta acción no se puede deshacer. Esto eliminará permanentemente al producto
+                            <span className="font-semibold text-foreground"> {productToDelete?.name} </span>
+                            del inventario.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                            Eliminar
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
             {/* --- HEADER STICKY "GLASS" --- */}
             <div className="sticky top-0 z-30 border-b border-border/40 bg-background/80 backdrop-blur-md px-6 py-4 transition-all">
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4 max-w-7xl mx-auto w-full">
@@ -132,11 +164,11 @@ export default function InventoryPage() {
                             Gestión de stock, productos y precios.
                         </p>
                     </div>
-                    
+
                     <div className="flex items-center gap-3 w-full sm:w-auto">
-                        {/* BOTÓN EXCEL (Estilo Esmeralda Glass) */}
-                        <Button 
-                            variant="outline" 
+                        {/* BOTÓN EXCEL (Estilo Original Restaurado) */}
+                        <Button
+                            variant="outline"
                             onClick={() => setIsImportOpen(true)}
                             className="bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border-emerald-500/20 hover:border-emerald-500/40 shadow-sm backdrop-blur-sm transition-all"
                         >
@@ -145,7 +177,7 @@ export default function InventoryPage() {
                         </Button>
 
                         {/* BOTÓN NUEVO (Estilo Primary Glass) */}
-                        <Button 
+                        <Button
                             onClick={handleCreate}
                             variant="outline"
                             className="bg-primary/10 text-primary hover:bg-primary/20 border-primary/20 hover:border-primary/40 shadow-sm backdrop-blur-sm transition-all"
@@ -159,7 +191,7 @@ export default function InventoryPage() {
 
             <div className="max-w-7xl mx-auto px-4 sm:px-6 w-full space-y-8">
 
-                {/* --- KPI CARDS (RESUMEN) --- */}
+                {/* --- KPI CARDS (ESTILO ORIGINAL RESTAURADO) --- */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {/* Total Productos (Indigo) */}
                     <Card className="border-border/50 bg-gradient-to-br from-card via-card/95 to-indigo-500/10 shadow-sm relative overflow-hidden">
@@ -220,7 +252,7 @@ export default function InventoryPage() {
                         <div className="relative w-72">
                             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                             <Input
-                                placeholder="Buscar por nombre, SKU, marca..."
+                                placeholder="Buscar por nombre, SKU, categoría..."
                                 className="pl-8 bg-background/50 border-border/50 focus:bg-background transition-colors"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -238,8 +270,13 @@ export default function InventoryPage() {
                                 </div>
                             ) : filteredProducts?.length === 0 ? (
                                 <div className="text-center py-16 text-muted-foreground flex flex-col items-center gap-3">
-                                    <Package className="h-12 w-12 opacity-20" />
-                                    <p>No se encontraron productos</p>
+                                    <EmptyState
+                                        icon={Package}
+                                        title="Sin productos"
+                                        description={searchTerm ? "No se encontraron resultados" : "No tienes productos cargados"}
+                                        actionLabel={!searchTerm ? "Crear Producto" : undefined}
+                                        onAction={!searchTerm ? handleCreate : undefined}
+                                    />
                                 </div>
                             ) : (
                                 <div className="overflow-x-auto">
@@ -247,12 +284,10 @@ export default function InventoryPage() {
                                         <TableHeader>
                                             <TableRow className="bg-muted/30 hover:bg-muted/30">
                                                 <TableHead>SKU</TableHead>
-                                                <TableHead>Marca / Modelo</TableHead>
-                                                <TableHead>Producto</TableHead>
-                                                <TableHead>Calidad</TableHead>
+                                                <TableHead>Producto / Detalles</TableHead>
                                                 <TableHead>Categoría</TableHead>
                                                 <TableHead className="text-right">Costo</TableHead>
-                                                <TableHead className="text-right">Precio Venta</TableHead>
+                                                <TableHead className="text-right">Venta</TableHead>
                                                 <TableHead className="text-center w-[120px]">Stock</TableHead>
                                                 <TableHead className="text-right">Acciones</TableHead>
                                             </TableRow>
@@ -260,50 +295,32 @@ export default function InventoryPage() {
                                         <TableBody>
                                             {filteredProducts?.map((product) => {
                                                 const isLowStock = product.quantity <= (product.lowStockThreshold || 0);
-                                                
+
                                                 return (
                                                     <TableRow key={product.id} className="hover:bg-muted/30 transition-colors group">
+                                                        {/* SKU */}
                                                         <TableCell className="font-mono text-xs text-muted-foreground">
                                                             {product.sku || "-"}
                                                         </TableCell>
-                                                        
+
+                                                        {/* PRODUCTO (Simplificado: Nombre + Descripción) */}
                                                         <TableCell>
                                                             <div className="flex flex-col">
-                                                                <span className="font-medium text-sm">{product.brand || "-"}</span>
-                                                                <span className="text-xs text-muted-foreground">{product.model}</span>
+                                                                <span className="font-medium">{product.name}</span>
+                                                                {product.description && (
+                                                                    <span className="text-xs text-muted-foreground truncate max-w-[250px]">
+                                                                        {product.description}
+                                                                    </span>
+                                                                )}
                                                             </div>
                                                         </TableCell>
 
-                                                        <TableCell className="font-medium">
-                                                            <div className="text-foreground group-hover:text-primary transition-colors">{product.name}</div>
-                                                            {(product.description || product.detail) && (
-                                                                <div className="text-xs text-muted-foreground truncate max-w-[200px]">
-                                                                    {[product.detail, product.description].filter(Boolean).join(" • ")}
-                                                                </div>
-                                                            )}
-                                                        </TableCell>
-
-                                                        {/* CALIDAD (Zinc Glass) */}
+                                                        {/* CATEGORÍA */}
                                                         <TableCell>
-                                                            {product.quality ? (
-                                                                <Badge variant="outline" className="font-normal text-[10px] bg-zinc-500/10 text-zinc-500 border-zinc-500/20 uppercase tracking-wide">
-                                                                    {product.quality}
-                                                                </Badge>
-                                                            ) : (
-                                                                <span className="text-muted-foreground text-xs opacity-50">-</span>
-                                                            )}
-                                                        </TableCell>
-
-                                                        {/* CATEGORÍA (Indigo Glass) */}
-                                                        <TableCell>
-                                                            {product.category ? (
-                                                                <Badge variant="outline" className="font-normal text-[10px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20 flex w-fit items-center gap-1">
-                                                                    <Tag className="h-3 w-3 opacity-70" />
-                                                                    {product.category}
-                                                                </Badge>
-                                                            ) : (
-                                                                <span className="text-muted-foreground text-xs opacity-50">-</span>
-                                                            )}
+                                                            <Badge variant="outline" className="font-normal text-[10px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20 flex w-fit items-center gap-1">
+                                                                <Tag className="h-3 w-3 opacity-70" />
+                                                                {product.category || "General"}
+                                                            </Badge>
                                                         </TableCell>
 
                                                         <TableCell className="text-right text-muted-foreground font-mono text-xs">
@@ -312,8 +329,8 @@ export default function InventoryPage() {
                                                         <TableCell className="text-right font-bold tabular-nums text-sm">
                                                             {formatMoney(Number(product.price))}
                                                         </TableCell>
-                                                        
-                                                        {/* STOCK (Con alerta Glass) */}
+
+                                                        {/* STOCK + QuickRestock */}
                                                         <TableCell className="text-center">
                                                             <div className="flex items-center justify-center gap-2">
                                                                 {isLowStock ? (
@@ -326,6 +343,7 @@ export default function InventoryPage() {
                                                                         {product.quantity}
                                                                     </span>
                                                                 )}
+                                                                {/* POPUP DE REPOSICIÓN RÁPIDA (Si existe el componente) */}
                                                                 <div className="opacity-0 group-hover:opacity-100 transition-opacity">
                                                                     <QuickRestockPopover product={product} />
                                                                 </div>
@@ -351,36 +369,6 @@ export default function InventoryPage() {
                             )}
                         </CardContent>
                     </Card>
-
-                    <ProductDialog
-                        open={isProductOpen}
-                        onOpenChange={setIsProductOpen}
-                        product={selectedProduct}
-                    />
-
-                    <ImportDialog
-                        open={isImportOpen}
-                        onOpenChange={setIsImportOpen}
-                    />
-
-                    <AlertDialog open={!!productToDelete} onOpenChange={(open) => !open && setProductToDelete(null)}>
-                        <AlertDialogContent>
-                            <AlertDialogHeader>
-                                <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                    Esta acción no se puede deshacer. Esto eliminará permanentemente al producto
-                                    <span className="font-semibold text-foreground"> {productToDelete?.name} </span>
-                                    del inventario.
-                                </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                                    Eliminar
-                                </AlertDialogAction>
-                            </AlertDialogFooter>
-                        </AlertDialogContent>
-                    </AlertDialog>
                 </div>
             </div>
         </div>

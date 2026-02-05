@@ -30,14 +30,12 @@ export const intakeChecklistSchema = z.record(
 // 2. DEFINICIÓN DE TABLAS (Drizzle)
 // --------------------------------------------------------------------------
 
-// --- USERS ---
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
 });
 
-// --- CLIENTS ---
 export const clients = pgTable("clients", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: text("user_id").notNull(),
@@ -50,7 +48,6 @@ export const clients = pgTable("clients", {
   notes: text("notes").default(""),
 });
 
-// --- DEVICES ---
 export const devices = pgTable("devices", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: text("user_id").notNull(),
@@ -65,22 +62,18 @@ export const devices = pgTable("devices", {
   lockValue: text("lock_value").default(""),
 });
 
-// --- REPAIR ORDERS ---
 export const repairOrders = pgTable("repair_orders", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: text("user_id").notNull(),
   clientId: text("client_id").notNull(),
   deviceId: text("device_id").notNull(),
   status: text("status").notNull().default("recibido"),
-
   problem: text("problem").notNull(),
   diagnosis: text("diagnosis").default(""),
   solution: text("solution").default(""),
   technicianName: text("technician_name").default(""),
-
   estimatedCost: decimal("estimated_cost", { precision: 10, scale: 2 }).default("0"),
   finalCost: decimal("final_cost", { precision: 10, scale: 2 }).default("0"),
-
   estimatedDate: timestamp("estimated_date"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   completedAt: timestamp("completed_at"),
@@ -90,26 +83,21 @@ export const repairOrders = pgTable("repair_orders", {
   intakeChecklist: jsonb("intake_checklist").default({}),
 });
 
-// --- PRODUCTS ---
+// --- PRODUCTS (SIMPLIFICADO) ---
 export const products = pgTable("products", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: text("user_id").notNull(),
   name: text("name").notNull(),
-  description: text("description").default(""),
   sku: text("sku").default(""),
-  quantity: integer("quantity").notNull().default(0),
-  price: decimal("price", { precision: 10, scale: 2 }).notNull(),
-  cost: decimal("cost", { precision: 10, scale: 2 }).notNull().default("0"),
   category: text("category").default("General"),
+  description: text("description").default(""), // Ahora esto guarda los detalles
+  quantity: integer("quantity").notNull().default(0),
   lowStockThreshold: integer("low_stock_threshold").default(5),
-
-  brand: text("brand").default(""),
-  model: text("model").default(""),
-  quality: text("quality").default(""),
-  detail: text("detail").default(""),
+  price: decimal("price", { precision: 10, scale: 2 }).notNull().default("0"),
+  cost: decimal("cost", { precision: 10, scale: 2 }).notNull().default("0"),
+  // Eliminados: brand, model, quality, detail
 });
 
-// --- PAYMENTS ---
 export interface PaymentItem {
   type: "product" | "repair" | "other";
   id?: string;
@@ -129,7 +117,6 @@ export const payments = pgTable("payments", {
   items: jsonb("cart_items").$type<PaymentItem[]>(),
 });
 
-// --- EXPENSES ---
 export const expenses = pgTable("expenses", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: text("user_id").notNull(),
@@ -139,17 +126,14 @@ export const expenses = pgTable("expenses", {
   date: timestamp("date").notNull().defaultNow(),
 });
 
-// --- NUEVA TABLA: DAILY CASH (CAJA INICIAL DIARIA) ---
 export const dailyCash = pgTable("daily_cash", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: text("user_id").notNull(),
-  // Guardamos la fecha como string "YYYY-MM-DD" para identificar el "día lógico" único
   date: text("date").notNull(),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull().default("0"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// --- SETTINGS ---
 export const settings = pgTable("settings", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: text("user_id").notNull(),
@@ -170,27 +154,22 @@ export const settings = pgTable("settings", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-
 // --------------------------------------------------------------------------
 // 3. SCHEMAS & TYPES (ZOD + TS)
 // --------------------------------------------------------------------------
 
-// Helpers
 export const insertUserSchema = createInsertSchema(users);
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 
-// Clients
 export const insertClientSchema = createInsertSchema(clients).omit({ userId: true, id: true });
 export type Client = typeof clients.$inferSelect;
 export type InsertClient = z.infer<typeof insertClientSchema>;
 
-// Devices
 export const insertDeviceSchema = createInsertSchema(devices).omit({ userId: true, id: true });
 export type Device = typeof devices.$inferSelect;
 export type InsertDevice = z.infer<typeof insertDeviceSchema>;
 
-// Repair Orders
 export const insertRepairOrderSchema = createInsertSchema(repairOrders, {
   estimatedCost: z.coerce.number(),
   finalCost: z.coerce.number(),
@@ -203,7 +182,6 @@ export type RepairOrder = Omit<typeof repairOrders.$inferSelect, "estimatedCost"
 };
 export type InsertRepairOrder = z.infer<typeof insertRepairOrderSchema>;
 
-// Products
 export const insertProductSchema = createInsertSchema(products, {
   price: z.coerce.number(),
   cost: z.coerce.number(),
@@ -216,7 +194,6 @@ export type Product = Omit<typeof products.$inferSelect, "price" | "cost"> & {
 };
 export type InsertProduct = z.infer<typeof insertProductSchema>;
 
-// Payments
 export const insertPaymentSchema = createInsertSchema(payments, {
   amount: z.coerce.number(),
 }).pick({
@@ -231,7 +208,6 @@ export type Payment = Omit<typeof payments.$inferSelect, "amount"> & {
 };
 export type InsertPayment = z.infer<typeof insertPaymentSchema>;
 
-// Expenses
 export const insertExpenseSchema = createInsertSchema(expenses, {
   date: z.coerce.date(),
   amount: z.coerce.number()
@@ -246,20 +222,17 @@ export type Expense = Omit<typeof expenses.$inferSelect, "amount"> & {
 };
 export type InsertExpense = z.infer<typeof insertExpenseSchema>;
 
-// Daily Cash (Nuevo)
 export const insertDailyCashSchema = createInsertSchema(dailyCash, {
   amount: z.coerce.number(),
 }).pick({
   date: true,
   amount: true,
 });
-// Omitimos amount string original y lo reemplazamos por number en el tipo
 export type DailyCash = Omit<typeof dailyCash.$inferSelect, "amount"> & {
   amount: number;
 };
 export type InsertDailyCash = z.infer<typeof insertDailyCashSchema>;
 
-// Settings
 export const insertSettingsSchema = createInsertSchema(settings, {
   cardSurcharge: z.coerce.number(),
   transferSurcharge: z.coerce.number(),
@@ -286,7 +259,6 @@ export type Settings = Omit<typeof settings.$inferSelect, "cardSurcharge" | "tra
 };
 export type InsertSettings = z.infer<typeof insertSettingsSchema>;
 
-// Relations
 export interface RepairOrderWithDetails extends RepairOrder {
   client: Client;
   device: Device;

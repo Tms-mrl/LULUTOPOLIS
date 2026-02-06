@@ -279,5 +279,75 @@ export async function registerRoutes(server: Server, app: Express) {
     }
   });
 
+ // =========================================================
+  // REPORTES DETALLADOS PARA PDF (CORREGIDO)
+  // =========================================================
+  app.get("/api/reports/monthly-detail", async (req, res) => {
+    try {
+      const u = await getUserId(req);
+      const { month, year } = req.query;
+
+      if (!month || !year) {
+        return res.status(400).json({ error: "Month and year are required" });
+      }
+
+      const targetMonth = parseInt(month as string) - 1; 
+      const targetYear = parseInt(year as string);
+
+      // 1. CORRECCIÓN: Usamos 'getPaymentsWithOrders' que sí existe
+      const allPayments = await storage.getPaymentsWithOrders(u);
+      
+      const monthlyPayments = allPayments.filter(p => {
+        const d = new Date(p.date);
+        return d.getMonth() === targetMonth && d.getFullYear() === targetYear;
+      });
+
+      // 2. Obtener Gastos del mes
+      const allExpenses = await storage.getExpenses(u);
+      const monthlyExpenses = allExpenses.filter(e => {
+        const d = new Date(e.date);
+        return d.getMonth() === targetMonth && d.getFullYear() === targetYear;
+      });
+
+      // 3. Agrupar ingresos por método de pago
+      const incomeByMethod: Record<string, number> = {};
+      let totalIncome = 0;
+
+      monthlyPayments.forEach(p => {
+        const amount = Number(p.amount);
+        // Aseguramos que method sea string, si es null ponemos "Otros"
+        const method = p.method || "Otros";
+        incomeByMethod[method] = (incomeByMethod[method] || 0) + amount;
+        totalIncome += amount;
+      });
+
+      // 4. Calcular total gastos
+      const totalExpenses = monthlyExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
+
+      // 5. Formatear fechas
+      const startDate = new Date(targetYear, targetMonth, 1);
+      const endDate = new Date(targetYear, targetMonth + 1, 0);
+
+      res.json({
+        period: {
+          month: targetMonth + 1,
+          year: targetYear,
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString()
+        },
+        incomeByMethod: Object.entries(incomeByMethod).map(([method, total]) => ({ method, total })),
+        totals: {
+          income: totalIncome,
+          expenses: totalExpenses,
+          balance: totalIncome - totalExpenses
+        }
+      });
+
+    } catch (e) {
+      console.error("Error generando reporte mensual detallado:", e);
+      res.status(500).json({ error: "Error interno al generar el reporte" });
+    }
+  });
+
   return server;
 }

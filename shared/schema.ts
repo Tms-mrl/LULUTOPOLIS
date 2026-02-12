@@ -34,6 +34,10 @@ export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  subscriptionStatus: text("subscription_status").default("trial"), // 'active', 'trial', 'expired', 'past_due'
+  planType: text("plan_type").default("standard"), // 'standard', 'multisede', 'premium'
+  subscriptionEndDate: timestamp("subscription_end_date"), // La fecha clave
+  mpPayerId: text("mp_payer_id"), // Para identificarlo en Mercado Pago
 });
 
 export const clients = pgTable("clients", {

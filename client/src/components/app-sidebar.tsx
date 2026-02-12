@@ -9,7 +9,6 @@ import {
   HelpCircle,
   Package,
   Settings as SettingsIcon,
-  // Importamos los íconos para el nuevo logo
   Smartphone,
   Wrench,
 } from "lucide-react";
@@ -34,11 +33,11 @@ import { useQuery } from "@tanstack/react-query";
 import { type Settings } from "@shared/schema";
 import { cn } from "@/lib/utils";
 
-// Definimos los items con la paleta de colores
+// --- CAMBIO CLAVE: Dashboard apunta a /dashboard ---
 const menuItems = [
   {
     title: "Dashboard",
-    url: "/",
+    url: "/dashboard", // <--- CORREGIDO
     icon: LayoutDashboard,
     color: "text-pink-500",
     activeBg: "bg-pink-500/10",
@@ -109,7 +108,6 @@ export function AppSidebar() {
     queryKey: ["/api/settings"],
   });
 
-  // Animación suave para el texto
   const smoothHideText = "ml-3 transition-all duration-300 ease-in-out overflow-hidden group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:ml-0";
 
   return (
@@ -119,8 +117,6 @@ export function AppSidebar() {
         className="border-r border-border/50 bg-background/95 backdrop-blur-sm z-50"
         style={{ "--sidebar-width-icon": "4rem" } as React.CSSProperties}
       >
-        
-        {/* --- HEADER --- */}
         <SidebarHeader className="p-2">
           <SidebarMenu>
             <SidebarMenuItem>
@@ -128,15 +124,10 @@ export function AppSidebar() {
                 size="lg"
                 className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground hover:bg-muted/50 transition-all group overflow-hidden group-data-[collapsible=icon]:!justify-center group-data-[collapsible=icon]:!p-0"
               >
-                {/* NUEVO LOGO BASADO EN REFERENCIA: SMARTPHONE + WRENCH */}
                 <div className="relative flex aspect-square size-8 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0 shadow-sm shadow-primary/20 transition-all duration-300 overflow-hidden">
-                  {/* Smartphone de fondo, más sutil */}
                   <Smartphone className="absolute size-5 text-primary/50" strokeWidth={1.5} />
-                  {/* Llave inglesa en primer plano, rotada y más gruesa */}
                   <Wrench className="absolute size-5 text-primary rotate-[-30deg] translate-x-0.5" strokeWidth={2} />
                 </div>
-                
-                {/* Texto Header */}
                 <div className={`grid flex-1 text-left text-sm leading-tight ${smoothHideText}`}>
                   <span className="truncate font-bold text-base tracking-tight text-primary">GSM FIX</span>
                   <span className="truncate text-[10px] text-muted-foreground uppercase tracking-wider">Sistema de Gestión</span>
@@ -146,12 +137,12 @@ export function AppSidebar() {
           </SidebarMenu>
         </SidebarHeader>
 
-        {/* --- CONTENT --- */}
         <SidebarContent className="px-2 mt-4">
           <SidebarGroup>
             <SidebarGroupContent>
               <SidebarMenu className="gap-2">
                 {menuItems.map((item) => {
+                  // --- CAMBIO CLAVE: Lógica de activo mejorada para evitar falsos positivos con "/" ---
                   const isActive = location === item.url || (item.url !== "/" && location.startsWith(item.url));
                   
                   return (
@@ -177,11 +168,9 @@ export function AppSidebar() {
                               !isActive && "opacity-70 group-hover:opacity-100"
                             )} 
                           />
-                          
                           <span className={`text-sm font-medium truncate ${smoothHideText}`}>
                             {item.title}
                           </span>
-
                           {isActive && (
                             <div className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 rounded-r-full bg-current opacity-60 group-data-[collapsible=icon]:hidden" />
                           )}
@@ -195,10 +184,8 @@ export function AppSidebar() {
           </SidebarGroup>
         </SidebarContent>
 
-        {/* --- FOOTER --- */}
         <SidebarFooter className="border-t border-border/40 mt-auto p-2">
           <SidebarMenu>
-            {/* Soporte */}
             <SidebarMenuItem>
               <SidebarMenuButton 
                 onClick={() => setSupportDialogOpen(true)}
@@ -210,7 +197,6 @@ export function AppSidebar() {
               </SidebarMenuButton>
             </SidebarMenuItem>
 
-            {/* Perfil */}
             <SidebarMenuItem>
               <SidebarMenuButton
                 size="lg"
@@ -222,7 +208,6 @@ export function AppSidebar() {
                     {settings?.shopName?.substring(0, 2).toUpperCase() || "TL"}
                   </AvatarFallback>
                 </Avatar>
-                
                 <div className={`grid flex-1 text-left text-sm leading-tight ${smoothHideText}`}>
                   <span className="truncate font-semibold">{settings?.shopName || "Mi Taller"}</span>
                   <span className="truncate text-xs text-muted-foreground">Técnico Admin</span>

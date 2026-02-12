@@ -15,6 +15,9 @@ import { createClient } from "@supabase/supabase-js";
 import multer from "multer";
 import nodemailer from "nodemailer";
 
+// 1. IMPORTAMOS MERCADO PAGO
+import { MercadoPagoConfig, Preference } from 'mercadopago';
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }
@@ -24,26 +27,21 @@ const supabaseUrl = process.env.SUPABASE_URL || "";
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+// 2. CONFIGURAMOS MERCADO PAGO
+// ⚠️ IMPORTANTE: REEMPLAZA ESTO CON TU ACCESS TOKEN DE PRUEBA REAL
+const mpClient = new MercadoPagoConfig({ 
+  accessToken: process.env.MP_ACCESS_TOKEN || 'TEST-5276835275130568-020921-a8d22940bfa20b61ea22f289a43443f1-191157219' 
+});
+
 // --- HELPER: CALCULAR FECHA DE CAJA (ARGENTINA + CUTOFF) ---
-// Esta función asegura que el Backend use EXACTAMENTE la misma lógica que el Dashboard
 const getShiftDate = (settings: any): string => {
   const cutoffHour = Number(settings?.dayCutoffHour ?? 0);
-
   const now = new Date();
-  // 1. Forzamos la hora a Argentina (UTC-3) manualmente para el cálculo
-  //    (Restamos 3 horas a la hora UTC actual)
   now.setUTCHours(now.getUTCHours() - 3);
-
-  // 2. Obtenemos la hora "actual" en Argentina (0-23)
   const currentHourArg = now.getUTCHours();
-
-  // 3. Si la hora actual es menor al corte, pertenece al día anterior
-  //    (Ej: Son las 02:00 AM y el corte es a las 04:00 AM -> Es parte de la caja de ayer)
   if (currentHourArg < cutoffHour) {
     now.setDate(now.getDate() - 1);
   }
-
-  // 4. Devolvemos YYYY-MM-DD
   return now.toISOString().split("T")[0];
 };
 
@@ -53,12 +51,9 @@ export async function registerRoutes(server: Server, app: Express) {
     try {
       const authHeader = req.headers.authorization;
       if (!authHeader) return GUEST_ID;
-
       const token = authHeader.replace("Bearer ", "");
       const { data: { user }, error } = await supabase.auth.getUser(token);
-
       if (error || !user) return GUEST_ID;
-
       return user.id;
     } catch (e) {
       console.error("Error crítico validando usuario:", e);
@@ -155,17 +150,14 @@ export async function registerRoutes(server: Server, app: Express) {
   });
 
   // =========================================================
-  // GESTIÓN DE CAJA INICIAL (CORREGIDO)
+  // GESTIÓN DE CAJA INICIAL
   // =========================================================
 
   app.get("/api/cash/today", async (req, res) => {
     try {
       const u = await getUserId(req);
       const settings = await storage.getSettings(u);
-
-      // Usamos el helper para calcular la fecha correcta
       const dateStr = getShiftDate(settings);
-
       const result = await storage.getDailyCash(u, dateStr);
       res.json({ amount: result ? result.amount : null });
     } catch (e) {
@@ -178,28 +170,21 @@ export async function registerRoutes(server: Server, app: Express) {
     try {
       const u = await getUserId(req);
       const parseResult = insertDailyCashSchema.pick({ amount: true }).safeParse(req.body);
-
       if (!parseResult.success) {
         return res.status(400).json({ error: parseResult.error.errors });
       }
-
       const settings = await storage.getSettings(u);
-
-      // Usamos el helper para calcular la fecha correcta (igual que en el GET)
       const dateStr = getShiftDate(settings);
-
       const result = await storage.upsertDailyCash(u, {
         date: dateStr,
         amount: parseResult.data.amount
       });
-
       res.json(result);
     } catch (e) {
       console.error("Error guardando caja:", e);
       res.status(500).json({ error: "Error guardando caja" });
     }
   });
-  // =========================================================
 
   app.get("/api/stats", async (req, res) => {
     try {
@@ -279,9 +264,6 @@ export async function registerRoutes(server: Server, app: Express) {
     }
   });
 
- // =========================================================
-  // REPORTES DETALLADOS PARA PDF (CORREGIDO)
-  // =========================================================
   app.get("/api/reports/monthly-detail", async (req, res) => {
     try {
       const u = await getUserId(req);
@@ -291,40 +273,30 @@ export async function registerRoutes(server: Server, app: Express) {
         return res.status(400).json({ error: "Month and year are required" });
       }
 
-      const targetMonth = parseInt(month as string) - 1; 
+      const targetMonth = parseInt(month as string) - 1;
       const targetYear = parseInt(year as string);
-
-      // 1. CORRECCIÓN: Usamos 'getPaymentsWithOrders' que sí existe
       const allPayments = await storage.getPaymentsWithOrders(u);
-      
       const monthlyPayments = allPayments.filter(p => {
         const d = new Date(p.date);
         return d.getMonth() === targetMonth && d.getFullYear() === targetYear;
       });
-
-      // 2. Obtener Gastos del mes
       const allExpenses = await storage.getExpenses(u);
       const monthlyExpenses = allExpenses.filter(e => {
         const d = new Date(e.date);
         return d.getMonth() === targetMonth && d.getFullYear() === targetYear;
       });
 
-      // 3. Agrupar ingresos por método de pago
       const incomeByMethod: Record<string, number> = {};
       let totalIncome = 0;
 
       monthlyPayments.forEach(p => {
         const amount = Number(p.amount);
-        // Aseguramos que method sea string, si es null ponemos "Otros"
         const method = p.method || "Otros";
         incomeByMethod[method] = (incomeByMethod[method] || 0) + amount;
         totalIncome += amount;
       });
 
-      // 4. Calcular total gastos
       const totalExpenses = monthlyExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
-
-      // 5. Formatear fechas
       const startDate = new Date(targetYear, targetMonth, 1);
       const endDate = new Date(targetYear, targetMonth + 1, 0);
 
@@ -346,6 +318,70 @@ export async function registerRoutes(server: Server, app: Express) {
     } catch (e) {
       console.error("Error generando reporte mensual detallado:", e);
       res.status(500).json({ error: "Error interno al generar el reporte" });
+    }
+  });
+
+  // =========================================================
+  // 3. NUEVA RUTA DE PAGO MERCADO PAGO
+  // =========================================================
+  app.post("/api/create-payment-preference", async (req, res) => {
+    try {
+        const { planId, period, userId, email } = req.body;
+
+        // Definimos los precios (coinciden con el Frontend)
+        const prices: Record<string, Record<string, number>> = {
+            'standard': {
+                'monthly': 30000,
+                'semester': 162000,
+                'annual': 288000
+            },
+            'multisede': {
+                'monthly': 30000,
+                'semester': 162000,
+                'annual': 288000
+            }
+        };
+
+        if (!prices[planId] || !prices[planId][period]) {
+            return res.status(400).json({ error: "Plan o periodo inválido" });
+        }
+
+        const unitPrice = prices[planId][period];
+
+        const preference = new Preference(mpClient);
+
+        const result = await preference.create({
+            body: {
+                items: [
+                    {
+                        id: `${planId}_${period}`,
+                        title: `Suscripción GSM FIX - Plan ${planId} (${period})`,
+                        quantity: 1,
+                        unit_price: unitPrice,
+                        currency_id: 'ARS',
+                    }
+                ],
+                payer: {
+                    email: email
+                },
+                back_urls: {
+                    success: "http://localhost:5001/dashboard?payment=success",
+                    failure: "http://localhost:5001/dashboard?payment=failure",
+                    pending: "http://localhost:5001/dashboard?payment=pending",
+                },
+                auto_return: "approved",
+                metadata: {
+                    user_id: userId,
+                    plan_id: planId,
+                    period: period
+                }
+            }
+        });
+
+        res.json({ id: result.id });
+    } catch (error) {
+        console.error("Error MercadoPago:", error);
+        res.status(500).json({ error: "Error al crear preferencia de pago" });
     }
   });
 

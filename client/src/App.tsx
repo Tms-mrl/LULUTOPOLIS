@@ -8,6 +8,10 @@ import NotFound from "@/pages/not-found";
 import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "@/components/protected-route";
 
+// 👇 IMPORTAMOS EL CANDADO Y LA PÁGINA DE ÉXITO
+import { SubscriptionGuard } from "@/components/subscription-guard";
+import PaymentSuccess from "@/pages/payment-success";
+
 // TUS PÁGINAS (App)
 import Dashboard from "@/pages/dashboard";
 import Orders from "@/pages/orders";
@@ -22,7 +26,7 @@ import PrintOrder from "@/pages/print-order";
 import InventoryPage from "@/pages/inventory";
 import SettingsPage from "@/pages/settings";
 
-// PÁGINAS PÚBLICAS (Nombres de archivos reales en tu carpeta)
+// PÁGINAS PÚBLICAS
 import LandingPage from "@/pages/landing/home";
 import Login from "@/pages/auth-login";
 import Register from "@/pages/auth-register";
@@ -30,7 +34,7 @@ import Register from "@/pages/auth-register";
 function App() {
   const [location] = useLocation();
 
-  // Definimos qué URLs son públicas para que no intente ponerles el Sidebar
+  // Definimos qué rutas son públicas (no requieren Sidebar ni Auth)
   const isPublicRoute =
     location === "/" ||
     location === "/login" ||
@@ -46,13 +50,12 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         {isPublicRoute ? (
+          /* 1. RUTAS PÚBLICAS (Landing, Login, Register) */
           <Switch>
             <Route path="/" component={LandingPage} />
-            {/* AQUÍ CONFIGURAMOS LAS RUTAS QUE TIRABAN 404 */}
             <Route path="/login" component={Login} />
             <Route path="/register" component={Register} />
 
-            {/* Si alguien va a /auth, lo mandamos al login nuevo */}
             <Route path="/auth" component={Login} />
             <Route path="/auth/login" component={Login} />
             <Route path="/auth/register" component={Register} />
@@ -60,6 +63,7 @@ function App() {
             <Route component={NotFound} />
           </Switch>
         ) : (
+          /* 2. RUTAS PRIVADAS (Dashboard y App) */
           <SidebarProvider style={sidebarStyle as React.CSSProperties}>
             <div className="flex min-h-screen w-full bg-sidebar-background/5">
               <AppSidebar />
@@ -69,22 +73,40 @@ function App() {
                 </header>
                 <main className="flex-1 overflow-auto p-6">
                   <div className="max-w-7xl mx-auto animate-in fade-in duration-300">
+
                     <ProtectedRoute
                       component={() => (
+                        /* USAMOS UN SWITCH AQUÍ PARA SEPARAR EL ÉXITO DEL RESTO */
                         <Switch>
-                          <Route path="/dashboard" component={Dashboard} />
-                          <Route path="/ordenes" component={Orders} />
-                          <Route path="/ordenes/nueva" component={NewOrder} />
-                          <Route path="/ordenes/:id/print" component={PrintOrder} />
-                          <Route path="/ordenes/:id" component={OrderDetail} />
-                          <Route path="/clientes" component={Clients} />
-                          <Route path="/clientes/nuevo" component={NewClient} />
-                          <Route path="/clientes/:id" component={ClientDetail} />
-                          <Route path="/cobros" component={Payments} />
-                          <Route path="/reportes" component={Reports} />
-                          <Route path="/inventory" component={InventoryPage} />
-                          <Route path="/configuracion" component={SettingsPage} />
-                          <Route component={NotFound} />
+
+                          {/* ✅ RUTA 1: PAGO EXITOSO 
+                              (Esta va PRIMERO y SIN SubscriptionGuard para evitar bloqueos por delay en la BD) 
+                          */}
+                          <Route path="/payment-success" component={PaymentSuccess} />
+
+                          {/* 🔒 RUTA 2: EL RESTO DE LA APP (Candado Activo)
+                              Si la ruta no es /payment-success, cae aquí y se le aplica el Guard.
+                          */}
+                          <Route>
+                            <SubscriptionGuard>
+                              <Switch>
+                                <Route path="/dashboard" component={Dashboard} />
+                                <Route path="/ordenes" component={Orders} />
+                                <Route path="/ordenes/nueva" component={NewOrder} />
+                                <Route path="/ordenes/:id/print" component={PrintOrder} />
+                                <Route path="/ordenes/:id" component={OrderDetail} />
+                                <Route path="/clientes" component={Clients} />
+                                <Route path="/clientes/nuevo" component={NewClient} />
+                                <Route path="/clientes/:id" component={ClientDetail} />
+                                <Route path="/cobros" component={Payments} />
+                                <Route path="/reportes" component={Reports} />
+                                <Route path="/inventory" component={InventoryPage} />
+                                <Route path="/configuracion" component={SettingsPage} />
+                                <Route component={NotFound} />
+                              </Switch>
+                            </SubscriptionGuard>
+                          </Route>
+
                         </Switch>
                       )}
                     />

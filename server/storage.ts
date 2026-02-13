@@ -15,6 +15,8 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  // 👇 NUEVO: Método genérico para actualizar usuario (necesario para suscripciones)
+  updateUser(id: string, user: Partial<User>): Promise<User | undefined>;
 
   getClients(userId: string): Promise<Client[]>;
   getClient(id: string): Promise<Client | undefined>;
@@ -56,8 +58,20 @@ export interface IStorage {
 }
 
 export class SupabaseStorage implements IStorage {
-  
+
   // --- MAPPERS ---
+  private mapUser(row: any): User {
+    return {
+      id: row.id,
+      email: row.email,
+      trialEndsAt: row.trial_ends_at ? new Date(row.trial_ends_at) : null,
+      subscriptionStatus: row.subscription_status,
+      currentPeriodEnd: row.current_period_end ? new Date(row.current_period_end) : null,
+      billingInterval: row.billing_interval,
+      isAutoRenew: row.is_auto_renew
+    };
+  }
+
   private mapClient(row: any): Client {
     return {
       id: row.id,
@@ -179,18 +193,40 @@ export class SupabaseStorage implements IStorage {
 
   async getUser(id: string): Promise<User | undefined> {
     const { data } = await supabase.from("users").select("*").eq("id", id).single();
-    return data || undefined;
+    return data ? this.mapUser(data) : undefined;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const { data } = await supabase.from("users").select("*").eq("username", username).single();
-    return data || undefined;
+    // Nota: Como quitamos 'username' del schema, buscaremos por email o lo dejamos como stub
+    const { data } = await supabase.from("users").select("*").eq("email", username).single();
+    return data ? this.mapUser(data) : undefined;
   }
 
   async createUser(user: InsertUser): Promise<User> {
-    const { data, error } = await supabase.from("users").insert(user).select().single();
+    const payload = {
+      id: user.id,
+      email: user.email,
+      trial_ends_at: user.trialEndsAt,
+      subscription_status: user.subscriptionStatus,
+      is_auto_renew: user.isAutoRenew
+    };
+    const { data, error } = await supabase.from("users").insert(payload).select().single();
     if (error) throw error;
-    return data;
+    return this.mapUser(data);
+  }
+
+  // 👇 MÉTODO AGREGADO: Vital para renovar suscripciones desde routes.ts
+  async updateUser(id: string, user: Partial<User>): Promise<User | undefined> {
+    const payload: any = {};
+    if (user.subscriptionStatus) payload.subscription_status = user.subscriptionStatus;
+    if (user.billingInterval) payload.billing_interval = user.billingInterval;
+    if (user.currentPeriodEnd) payload.current_period_end = user.currentPeriodEnd;
+    if (user.isAutoRenew !== undefined) payload.is_auto_renew = user.isAutoRenew;
+    if (user.trialEndsAt) payload.trial_ends_at = user.trialEndsAt;
+
+    const { data, error } = await supabase.from("users").update(payload).eq("id", id).select().single();
+    if (error) return undefined;
+    return this.mapUser(data);
   }
 
   async getClients(userId: string): Promise<Client[]> {
@@ -558,14 +594,13 @@ export class SupabaseStorage implements IStorage {
     };
   }
 
-  // --- PRODUCTOS SIMPLIFICADOS ---
   async getProducts(userId: string): Promise<Product[]> {
     const { data } = await supabase.from("products").select("*").eq("user_id", userId).order("name");
     return (data || []).map(p => ({
       id: p.id,
       userId: p.user_id,
       name: p.name,
-      description: p.description, 
+      description: p.description,
       sku: p.sku,
       quantity: p.quantity,
       price: parseFloat(p.price),

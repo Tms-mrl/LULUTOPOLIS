@@ -3,8 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Check, Star, Lock } from "lucide-react";
-import { Link } from "wouter";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+// 👇 IMPORTACIONES NUEVAS PARA LA LÓGICA
+import { useLocation } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
 
 type BillingPeriod = 'monthly' | 'semester' | 'annual';
 
@@ -19,7 +22,7 @@ interface Plan {
     };
     features: string[];
     cta: string;
-    popular: boolean; // Usamos esto para determinar el estilo visual principal
+    popular: boolean; 
     isUpcoming?: boolean;
     extraInfo?: string;
     colorTheme: 'emerald' | 'purple';
@@ -27,6 +30,10 @@ interface Plan {
 
 const PricingSection = () => {
     const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
+    
+    // 👇 HOOKS PARA DETECTAR USUARIO Y REDIRIGIR
+    const { user } = useAuth();
+    const [, setLocation] = useLocation();
 
     const plans: Plan[] = [
         {
@@ -35,8 +42,8 @@ const PricingSection = () => {
             description: "Para talleres que necesitan organización total.",
             prices: {
                 monthly: "$30.000",
-                semester: "$162.000",
-                annual: "$288.000",
+                semester: "$160.000",
+                annual: "$300.000",
             },
             features: [
                 "Órdenes ilimitadas",
@@ -47,7 +54,7 @@ const PricingSection = () => {
                 "Soporte"
             ],
             cta: "Comenzar Gratis",
-            popular: true, // Este activa el botón verde brillante
+            popular: true, 
             isUpcoming: false,
             colorTheme: 'emerald'
         },
@@ -57,8 +64,8 @@ const PricingSection = () => {
             description: "La opción ideal para talleres con varias sucursales.",
             prices: {
                 monthly: "$30.000",
-                semester: "$162.000",
-                annual: "$288.000",
+                semester: "$160.000",
+                annual: "$300.000",
             },
             extraInfo: "+ $10.000 por sucursal extra",
             features: [
@@ -107,6 +114,20 @@ const PricingSection = () => {
         }
     };
 
+    // 👇 FUNCIÓN INTELIGENTE DE SELECCIÓN
+    const handlePlanSelect = (planId: string) => {
+        if (user) {
+            // ✅ USUARIO LOGUEADO:
+            // Lo mandamos directo a la configuración en la pestaña de pagos.
+            // (El usuario ya existe, solo quiere pagar/activar)
+            setLocation("/configuracion?tab=subscription");
+        } else {
+            // ❌ USUARIO NUEVO:
+            // Lo mandamos al registro con la "mochila" de datos (plan y periodo)
+            setLocation(`/register?plan=${planId}&period=${billingPeriod}`);
+        }
+    };
+
     return (
         <section id="pricing" className="py-20 bg-card/50">
             <div className="container mx-auto px-4">
@@ -135,7 +156,6 @@ const PricingSection = () => {
 
                 <div className="flex flex-wrap justify-center gap-8 max-w-7xl mx-auto items-stretch py-10">
                     {plans.map((plan) => {
-                        // Estilos de la tarjeta (Tus luces + Estructura del amigo)
                         let cardStyles = "";
                         if (plan.colorTheme === 'emerald') {
                             cardStyles = "bg-[radial-gradient(ellipse_at_bottom_right,_var(--tw-gradient-stops))] from-emerald-500/30 via-card/80 to-card border-2 border-emerald-500 shadow-2xl shadow-emerald-500/20";
@@ -196,7 +216,7 @@ const PricingSection = () => {
                                         </ul>
                                     </div>
 
-                                    {/* BOTONES CON EL ESTILO DE TU AMIGO */}
+                                    {/* 👇 LÓGICA DE BOTONES MODIFICADA */}
                                     {plan.isUpcoming ? (
                                         <Button
                                             disabled
@@ -205,17 +225,16 @@ const PricingSection = () => {
                                             <Lock className="w-4 h-4 mr-2" /> {plan.cta}
                                         </Button>
                                     ) : (
-                                        /* Link de Wouter para la mochila 🎒 */
-                                        <Link href={`/register?plan=${plan.id}&period=${billingPeriod}`} className="w-full">
-                                            <Button
-                                                className={`w-full text-base py-6 font-bold transition-all duration-300 ${plan.popular
-                                                    ? 'bg-emerald-500 hover:bg-emerald-600 border-0 text-black shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40'
-                                                    : 'bg-primary/5 border border-primary/20 text-foreground hover:bg-primary/10 hover:border-primary/40'
-                                                    }`}
-                                            >
-                                                {plan.cta}
-                                            </Button>
-                                        </Link>
+                                        // Usamos onClick en lugar de Link para evaluar la sesión
+                                        <Button
+                                            onClick={() => handlePlanSelect(plan.id)}
+                                            className={`w-full text-base py-6 font-bold transition-all duration-300 ${plan.popular
+                                                ? 'bg-emerald-500 hover:bg-emerald-600 border-0 text-black shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40'
+                                                : 'bg-primary/5 border border-primary/20 text-foreground hover:bg-primary/10 hover:border-primary/40'
+                                                }`}
+                                        >
+                                            {plan.cta}
+                                        </Button>
                                     )}
                                 </CardContent>
                             </Card>

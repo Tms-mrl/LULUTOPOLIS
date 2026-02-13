@@ -2,6 +2,7 @@ import { createContext, ReactNode, useContext, useEffect, useState } from "react
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabaseClient";
 import { useLocation } from "wouter";
+import { queryClient } from "@/lib/queryClient"; // <--- Importante para limpiar caché
 
 type AuthContextType = {
     session: Session | null;
@@ -19,14 +20,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [, setLocation] = useLocation();
 
     useEffect(() => {
-        // Get initial session
+        // 1. Obtener sesión inicial
         supabase.auth.getSession().then(({ data: { session } }) => {
             setSession(session);
             setUser(session?.user ?? null);
             setIsLoading(false);
         });
 
-        // Listen for auth changes
+        // 2. Escuchar cambios (Login, Logout, Token Refresh)
         const {
             data: { subscription },
         } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -39,8 +40,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const signOut = async () => {
+        // Limpiamos la caché de React Query para que no queden datos "fantasmas"
+        queryClient.clear();
+
         await supabase.auth.signOut();
-        setLocation("/auth");
+
+        // Redirigimos a la Landing Page (Raíz)
+        setLocation("/");
     };
 
     return (

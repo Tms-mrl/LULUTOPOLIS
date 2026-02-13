@@ -14,9 +14,8 @@ import {
 import { createClient } from "@supabase/supabase-js";
 import multer from "multer";
 import nodemailer from "nodemailer";
-
-// 1. IMPORTAMOS MERCADO PAGO
-import { MercadoPagoConfig, Preference } from 'mercadopago';
+// Importamos Payment también para verificar el estado real
+import { MercadoPagoConfig, Preference, Payment } from 'mercadopago';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -27,18 +26,13 @@ const supabaseUrl = process.env.SUPABASE_URL || "";
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// 2. CONFIGURAMOS MERCADO PAGO
-// ⚠️ IMPORTANTE: REEMPLAZA ESTO CON TU ACCESS TOKEN DE PRUEBA REAL
-const mpClient = new MercadoPagoConfig({ 
-  accessToken: process.env.MP_ACCESS_TOKEN || 'TEST-5276835275130568-020921-a8d22940bfa20b61ea22f289a43443f1-191157219' 
-});
-
 // --- HELPER: CALCULAR FECHA DE CAJA (ARGENTINA + CUTOFF) ---
 const getShiftDate = (settings: any): string => {
   const cutoffHour = Number(settings?.dayCutoffHour ?? 0);
   const now = new Date();
-  now.setUTCHours(now.getUTCHours() - 3);
+  now.setUTCHours(now.getUTCHours() - 3); // UTC-3 Argentina
   const currentHourArg = now.getUTCHours();
+
   if (currentHourArg < cutoffHour) {
     now.setDate(now.getDate() - 1);
   }
@@ -51,8 +45,10 @@ export async function registerRoutes(server: Server, app: Express) {
     try {
       const authHeader = req.headers.authorization;
       if (!authHeader) return GUEST_ID;
+
       const token = authHeader.replace("Bearer ", "");
       const { data: { user }, error } = await supabase.auth.getUser(token);
+
       if (error || !user) return GUEST_ID;
       return user.id;
     } catch (e) {
@@ -61,7 +57,226 @@ export async function registerRoutes(server: Server, app: Express) {
     }
   };
 
-  // --- RUTAS ESTÁNDAR ---
+  // --- CONFIGURACIÓN MERCADO PAGO ---
+  const mpClient = new MercadoPagoConfig({ accessToken: process.env.MP_ACCESS_TOKEN || '' });
+
+  // --- SUBSCRIPCIÓN & USUARIO ---
+  app.get("/api/user/subscription", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader) return res.status(401).json({ error: "No token provided" });
+      const token = authHeader.replace("Bearer ", "");
+      const { data: { user }, error } = await supabase.auth.getUser(token);
+
+      if (error || !user) return res.status(401).json({ error: "Invalid token" });
+
+      let dbUser = await storage.getUser(user.id);
+
+      // Lazy Init: Create if not exists
+      if (!dbUser) {
+        const trialEndsAt = new Date();
+        trialEndsAt.setDate(trialEndsAt.getDate() + 7);
+
+        try {
+          dbUser = await storage.createUser({
+            id: user.id,
+            email: user.email,
+            trialEndsAt: trialEndsAt,
+            subscriptionStatus: "trialing",
+            isAutoRenew: true,
+            billingInterval: null,
+            currentPeriodEnd: null
+          });
+        } catch (createError) {
+          console.error("Error creating user subscription record:", createError);
+          dbUser = await storage.getUser(user.id);
+          if (!dbUser) {
+            return res.status(500).json({ error: "Failed to initialize subscription" });
+          }
+        }
+      }
+
+      res.json({
+        subscriptionStatus: dbUser?.subscriptionStatus,
+        trialEndsAt: dbUser?.trialEndsAt,
+        currentPeriodEnd: dbUser?.currentPeriodEnd,
+        billingInterval: dbUser?.billingInterval,
+        isAutoRenew: dbUser?.isAutoRenew
+      });
+    } catch (e) {
+      console.error("Subscription check error:", e);
+      res.status(500).json({ error: "Internal Server Error" });
+    }
+  });
+
+  // =========================================================
+  // 1. CHECKOUT (Genera el Link de Pago)
+  // =========================================================
+  app.post("/api/checkout", async (req, res) => {
+    try {
+      // Verificación de Seguridad
+      const authHeader = req.headers.authorization;
+      if (!authHeader) return res.status(401).json({ error: "No token provided" });
+
+      const token = authHeader.replace("Bearer ", "");
+      const { data: { user }, error } = await supabase.auth.getUser(token);
+
+      if (error || !user) {
+        return res.status(401).json({ error: "Unauthorized: Invalid token" });
+      }
+
+      // Definir Precios
+      const { planId } = req.body;
+      let title = "Suscripción Mensual - GSM FIX";
+      let price = 30000;
+
+      if (planId === 'semi_annual') {
+        title = "Suscripción Semestral - GSM FIX";
+        price = 160000;
+      } else if (planId === 'annual') {
+        title = "Suscripción Anual - GSM FIX";
+        price = 300000;
+      }
+
+      // Definir URLs
+      // BASE_URL: A donde vuelve el usuario (Frontend)
+      // WEBHOOK_URL: A donde avisa Mercado Pago (Backend - Solo funciona en Prod o ngrok)
+      let baseUrl = process.env.BASE_URL;
+      if (!baseUrl) baseUrl = "http://localhost:5173";
+      baseUrl = baseUrl.replace(/\/$/, "");
+
+      const webhookUrl = process.env.WEBHOOK_URL; // Esta variable la configurarás en Railway
+
+      console.log(`🚀 Creando pago MP | Plan: ${planId} | User: ${user.email}`);
+
+      const preference = new Preference(mpClient);
+      const result = await preference.create({
+        body: {
+          items: [
+            {
+              id: planId,
+              title: title,
+              quantity: 1,
+              unit_price: price,
+              currency_id: 'ARS',
+            },
+          ],
+          external_reference: user.id, // ID Usuario
+          back_urls: {
+            success: `${baseUrl}/payment-success?planId=${planId}`,
+            failure: `${baseUrl}/plan-expired`,
+            pending: `${baseUrl}/plan-expired`
+          },
+          // Si existe WEBHOOK_URL (en Railway), lo usa. Si no (localhost), no lo manda.
+          notification_url: webhookUrl ? `${webhookUrl}/api/webhooks/mercadopago` : undefined,
+          // auto_return: 'approved', // Comentado para evitar errores en dev
+        }
+      });
+
+      res.json({ init_point: result.init_point });
+    } catch (e: any) {
+      console.error("❌ Error creando preferencia MP:", e);
+      res.status(500).json({ error: "Error creando pago: " + (e.message || "Unknown error") });
+    }
+  });
+
+  // =========================================================
+  // 2. WEBHOOK REAL (Se usará en Producción/Railway)
+  // =========================================================
+  app.post("/api/webhooks/mercadopago", async (req, res) => {
+    const { type, data } = req.body;
+
+    // Solo procesamos si es un pago
+    if (type === "payment" || req.body.action === "payment.created") {
+      try {
+        const id = data?.id || req.body.data?.id;
+        console.log("🔔 Webhook recibido! ID Pago:", id);
+
+        // Consultamos a MP el estado real para evitar fraudes
+        const paymentClient = new Payment(mpClient);
+        const payment = await paymentClient.get({ id: id });
+
+        if (payment.status === 'approved') {
+          console.log(`✅ Pago aprobado de: ${payment.payer?.email}`);
+
+          const userId = payment.external_reference;
+          const amount = payment.transaction_amount;
+
+          if (userId) {
+            let monthsToAdd = 1;
+            let billingInterval: 'monthly' | 'semi_annual' | 'annual' = 'monthly';
+
+            if (amount && amount >= 150000) { // Lógica simple basada en montos
+              if (amount >= 300000) {
+                monthsToAdd = 12;
+                billingInterval = 'annual';
+              } else {
+                monthsToAdd = 6;
+                billingInterval = 'semi_annual';
+              }
+            }
+
+            // Actualizar DB
+            const user = await storage.getUser(userId);
+            if (user) {
+              const currentExpiry = user.currentPeriodEnd ? new Date(user.currentPeriodEnd) : new Date();
+              // Si ya venció, usar fecha actual. Si no, sumar al vencimiento.
+              const baseDate = currentExpiry > new Date() ? currentExpiry : new Date();
+              baseDate.setMonth(baseDate.getMonth() + monthsToAdd);
+
+              await storage.updateUser(userId, {
+                subscriptionStatus: "active",
+                billingInterval: billingInterval,
+                currentPeriodEnd: baseDate,
+                isAutoRenew: true
+              });
+              console.log(`🎉 Usuario ${userId} renovado hasta ${baseDate.toISOString()}`);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error procesando webhook:", error);
+      }
+    }
+    res.status(200).send("OK");
+  });
+
+  // =========================================================
+  // 3. SIMULACIÓN (Para Localhost - SE BORRA O PROTEGE EN PROD)
+  // =========================================================
+  app.get("/api/test/simulate-payment/:userId/:planId", async (req, res) => {
+    try {
+      const { userId, planId } = req.params;
+
+      // En producción, aquí deberíamos validar que el usuario sea admin
+      // o eliminar este endpoint por completo.
+
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+
+      let months = 0;
+      if (planId === "monthly") months = 1;
+      else if (planId === "semi_annual") months = 6;
+      else if (planId === "annual") months = 12;
+
+      const newExpiry = new Date();
+      newExpiry.setMonth(newExpiry.getMonth() + months);
+
+      await storage.updateUser(userId, {
+        subscriptionStatus: "active",
+        billingInterval: planId as any,
+        currentPeriodEnd: newExpiry,
+        isAutoRenew: true
+      });
+
+      res.json({ success: true, new_expiry: newExpiry });
+    } catch (e) {
+      console.error("Simulation error:", e);
+      res.status(500).json({ error: "Simulation failed" });
+    }
+  });
+
+  // --- RUTAS ESTÁNDAR (CLIENTES, ORDENES, ETC.) ---
   app.get("/api/clients", async (req, res) => { try { const u = await getUserId(req); res.json(await storage.getClients(u)); } catch (e) { res.status(500).json({ error: "Error" }); } });
   app.get("/api/clients/:id", async (req, res) => { const c = await storage.getClient(req.params.id); if (!c) return res.status(404).json({ error: "Not found" }); res.json(c); });
   app.post("/api/clients", async (req, res) => {
@@ -170,15 +385,19 @@ export async function registerRoutes(server: Server, app: Express) {
     try {
       const u = await getUserId(req);
       const parseResult = insertDailyCashSchema.pick({ amount: true }).safeParse(req.body);
+
       if (!parseResult.success) {
         return res.status(400).json({ error: parseResult.error.errors });
       }
+
       const settings = await storage.getSettings(u);
       const dateStr = getShiftDate(settings);
+
       const result = await storage.upsertDailyCash(u, {
         date: dateStr,
         amount: parseResult.data.amount
       });
+
       res.json(result);
     } catch (e) {
       console.error("Error guardando caja:", e);
@@ -275,11 +494,13 @@ export async function registerRoutes(server: Server, app: Express) {
 
       const targetMonth = parseInt(month as string) - 1;
       const targetYear = parseInt(year as string);
+
       const allPayments = await storage.getPaymentsWithOrders(u);
       const monthlyPayments = allPayments.filter(p => {
         const d = new Date(p.date);
         return d.getMonth() === targetMonth && d.getFullYear() === targetYear;
       });
+
       const allExpenses = await storage.getExpenses(u);
       const monthlyExpenses = allExpenses.filter(e => {
         const d = new Date(e.date);
@@ -297,6 +518,7 @@ export async function registerRoutes(server: Server, app: Express) {
       });
 
       const totalExpenses = monthlyExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
+
       const startDate = new Date(targetYear, targetMonth, 1);
       const endDate = new Date(targetYear, targetMonth + 1, 0);
 
@@ -318,70 +540,6 @@ export async function registerRoutes(server: Server, app: Express) {
     } catch (e) {
       console.error("Error generando reporte mensual detallado:", e);
       res.status(500).json({ error: "Error interno al generar el reporte" });
-    }
-  });
-
-  // =========================================================
-  // 3. NUEVA RUTA DE PAGO MERCADO PAGO
-  // =========================================================
-  app.post("/api/create-payment-preference", async (req, res) => {
-    try {
-        const { planId, period, userId, email } = req.body;
-
-        // Definimos los precios (coinciden con el Frontend)
-        const prices: Record<string, Record<string, number>> = {
-            'standard': {
-                'monthly': 30000,
-                'semester': 162000,
-                'annual': 288000
-            },
-            'multisede': {
-                'monthly': 30000,
-                'semester': 162000,
-                'annual': 288000
-            }
-        };
-
-        if (!prices[planId] || !prices[planId][period]) {
-            return res.status(400).json({ error: "Plan o periodo inválido" });
-        }
-
-        const unitPrice = prices[planId][period];
-
-        const preference = new Preference(mpClient);
-
-        const result = await preference.create({
-            body: {
-                items: [
-                    {
-                        id: `${planId}_${period}`,
-                        title: `Suscripción GSM FIX - Plan ${planId} (${period})`,
-                        quantity: 1,
-                        unit_price: unitPrice,
-                        currency_id: 'ARS',
-                    }
-                ],
-                payer: {
-                    email: email
-                },
-                back_urls: {
-                    success: "http://localhost:5001/dashboard?payment=success",
-                    failure: "http://localhost:5001/dashboard?payment=failure",
-                    pending: "http://localhost:5001/dashboard?payment=pending",
-                },
-                auto_return: "approved",
-                metadata: {
-                    user_id: userId,
-                    plan_id: planId,
-                    period: period
-                }
-            }
-        });
-
-        res.json({ id: result.id });
-    } catch (error) {
-        console.error("Error MercadoPago:", error);
-        res.status(500).json({ error: "Error al crear preferencia de pago" });
     }
   });
 

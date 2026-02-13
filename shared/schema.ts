@@ -13,13 +13,20 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 // --------------------------------------------------------------------------
-// 1. CONSTANTES
+// 1. CONSTANTES & ENUMS
 // --------------------------------------------------------------------------
 export const orderStatuses = ["presupuesto", "recibido", "en_curso", "listo", "entregado"] as const;
 export type OrderStatus = typeof orderStatuses[number];
 
 export const paymentMethods = ["efectivo", "tarjeta", "transferencia"] as const;
 export type PaymentMethod = typeof paymentMethods[number];
+
+// Nuevos Enums para Suscripción
+export const subscriptionStatuses = ['trialing', 'active', 'past_due', 'canceled'] as const;
+export type SubscriptionStatus = typeof subscriptionStatuses[number];
+
+export const billingIntervals = ['monthly', 'semi_annual', 'annual'] as const;
+export type BillingInterval = typeof billingIntervals[number];
 
 export const intakeChecklistSchema = z.record(
   z.string(),
@@ -30,14 +37,15 @@ export const intakeChecklistSchema = z.record(
 // 2. DEFINICIÓN DE TABLAS (Drizzle)
 // --------------------------------------------------------------------------
 
+// CORREGIDO: Ajustado para coincidir con la tabla public.users de Supabase
 export const users = pgTable("users", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
-  subscriptionStatus: text("subscription_status").default("trial"), // 'active', 'trial', 'expired', 'past_due'
-  planType: text("plan_type").default("standard"), // 'standard', 'multisede', 'premium'
-  subscriptionEndDate: timestamp("subscription_end_date"), // La fecha clave
-  mpPayerId: text("mp_payer_id"), // Para identificarlo en Mercado Pago
+  id: uuid("id").primaryKey(), // Se vincula con auth.users
+  email: text("email"),        // Agregamos email
+  trialEndsAt: timestamp("trial_ends_at"),
+  subscriptionStatus: text("subscription_status").default("trialing"),
+  currentPeriodEnd: timestamp("current_period_end"),
+  billingInterval: text("billing_interval"),
+  isAutoRenew: boolean("is_auto_renew").default(true),
 });
 
 export const clients = pgTable("clients", {
@@ -87,19 +95,17 @@ export const repairOrders = pgTable("repair_orders", {
   intakeChecklist: jsonb("intake_checklist").default({}),
 });
 
-// --- PRODUCTS (SIMPLIFICADO) ---
 export const products = pgTable("products", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: text("user_id").notNull(),
   name: text("name").notNull(),
   sku: text("sku").default(""),
   category: text("category").default("General"),
-  description: text("description").default(""), // Ahora esto guarda los detalles
+  description: text("description").default(""),
   quantity: integer("quantity").notNull().default(0),
   lowStockThreshold: integer("low_stock_threshold").default(5),
   price: decimal("price", { precision: 10, scale: 2 }).notNull().default("0"),
   cost: decimal("cost", { precision: 10, scale: 2 }).notNull().default("0"),
-  // Eliminados: brand, model, quality, detail
 });
 
 export interface PaymentItem {
@@ -161,6 +167,15 @@ export const settings = pgTable("settings", {
 // --------------------------------------------------------------------------
 // 3. SCHEMAS & TYPES (ZOD + TS)
 // --------------------------------------------------------------------------
+
+// Schema específico para validar datos de suscripción (Útil para API)
+export const subscriptionSchema = z.object({
+  trialEndsAt: z.string().nullable().optional(),
+  subscriptionStatus: z.enum(subscriptionStatuses).default('trialing'),
+  currentPeriodEnd: z.string().nullable().optional(),
+  billingInterval: z.enum(billingIntervals).nullable().optional(),
+  isAutoRenew: z.boolean().default(true),
+});
 
 export const insertUserSchema = createInsertSchema(users);
 export type User = typeof users.$inferSelect;

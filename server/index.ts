@@ -7,23 +7,34 @@ import { createServer } from "http";
 
 const app = express();
 
-// --- CONFIGURACIÓN DE CORS FINAL ---
+// --- CONFIGURACIÓN DE CORS FINAL Y CORREGIDA ---
 app.use(cors({
   origin: (origin, callback) => {
     // 1. Permitir peticiones sin origen (como Postman o Server-to-Server)
     if (!origin) return callback(null, true);
 
-    // 2. Permitir Localhost (tu PC)
+    // 2. Permitir Localhost (tu PC en desarrollo)
     if (origin.startsWith("http://localhost")) {
       return callback(null, true);
     }
 
-    // 3. Permitir CUALQUIER dominio de Vercel (producción o previews)
+    // 3. Permitir CUALQUIER dominio de Vercel (para pruebas y previews)
     if (origin.endsWith(".vercel.app")) {
       return callback(null, true);
     }
 
-    console.log(`Bloqueado por CORS: ${origin}`);
+    // 4. 👇 NUEVO: Permitir TU dominio oficial (Producción)
+    const allowedDomains = [
+      'https://gsm-proyect.com',
+      'https://www.gsm-proyect.com'
+    ];
+
+    if (allowedDomains.includes(origin)) {
+      return callback(null, true);
+    }
+
+    // Si no cumple nada de lo anterior, bloqueamos
+    console.log(`🚫 Bloqueado por CORS: ${origin}`);
     callback(new Error('Not allowed by CORS'));
   },
   credentials: true

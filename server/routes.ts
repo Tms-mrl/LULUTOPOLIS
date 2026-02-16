@@ -128,7 +128,7 @@ export async function registerRoutes(server: Server, app: Express) {
       // Definir Precios
       const { planId } = req.body;
       let title = "Suscripción Mensual - GSM FIX";
-      let price = 30000;
+      let price = 10;
 
       if (planId === 'semi_annual') {
         title = "Suscripción Semestral - GSM FIX";

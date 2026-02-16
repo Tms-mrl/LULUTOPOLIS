@@ -128,14 +128,14 @@ export async function registerRoutes(server: Server, app: Express) {
       // Definir Precios
       const { planId } = req.body;
       let title = "Suscripción Mensual - GSM FIX";
-      let price = 10;
+      let price = 30000;
 
       if (planId === 'semi_annual') {
         title = "Suscripción Semestral - GSM FIX";
-        price = 160000;
+        price = 20;
       } else if (planId === 'annual') {
         title = "Suscripción Anual - GSM FIX";
-        price = 300000;
+        price = 30;
       }
 
       // Definir URLs
@@ -440,16 +440,43 @@ export async function registerRoutes(server: Server, app: Express) {
 
   app.delete("/api/products/:id", async (req, res) => { try { const u = await getUserId(req); await storage.deleteProduct(req.params.id, u); res.sendStatus(204); } catch (e) { res.status(500).json({ error: "Error deleting product" }); } });
 
-  app.post("/api/upload", upload.single("file"), (req: any, res: any) => {
+
+  app.post("/api/upload", upload.single("file"), async (req: any, res: any) => {
     try {
+      // 1. Validar que llegó un archivo
       if (!req.file) return res.status(400).json({ message: "No se subió ningún archivo" });
-      const b64 = Buffer.from(req.file.buffer).toString("base64");
-      const mimeType = req.file.mimetype;
-      const dataURI = `data:${mimeType};base64,${b64}`;
-      res.json({ url: dataURI });
-    } catch (error) {
+
+      const file = req.file;
+      const fileExt = file.originalname.split('.').pop();
+
+      // 2. Generar nombre único (para no sobrescribir si suben 2 fotos con el mismo nombre)
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      // 3. Subir a Supabase Storage (Bucket 'logos')
+      const { data, error } = await supabase.storage
+        .from('logos') // <--- AQUI USAMOS TU BUCKET EXISTENTE
+        .upload(filePath, file.buffer, {
+          contentType: file.mimetype,
+          upsert: false
+        });
+
+      if (error) {
+        console.error("Error de Supabase Storage:", error);
+        throw new Error("No se pudo guardar en el storage: " + error.message);
+      }
+
+      // 4. Obtener la URL Pública para guardarla en la Base de Datos
+      const { data: publicUrlData } = supabase.storage
+        .from('logos')
+        .getPublicUrl(filePath);
+
+      // Devuelve la URL corta (ej: https://.../logos/archivo.png)
+      res.json({ url: publicUrlData.publicUrl });
+
+    } catch (error: any) {
       console.error("Error en upload:", error);
-      res.status(500).json({ message: "Error al procesar la imagen" });
+      res.status(500).json({ message: "Error al procesar la imagen: " + error.message });
     }
   });
 

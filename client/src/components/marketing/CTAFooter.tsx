@@ -78,9 +78,9 @@ const CTAFooter = () => {
                 El sistema de gestión más completo para talleres de reparación de dispositivos móviles.
               </p>
               <div className="flex items-center gap-4">
-                <a href="mailto:info@gsmfix.com" className="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors text-sm">
+                <a href="mailto:Gsmfix.ar@gmail.com" className="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors text-sm">
                   <Mail className="w-4 h-4" />
-                  info@gsmfix.com
+                  Gsmfix.ar@gmail.com
                 </a>
               </div>
             </div>

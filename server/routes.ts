@@ -125,14 +125,14 @@ export async function registerRoutes(server: Server, app: Express) {
       // Definir Precios y Plan
       const { planId } = req.body;
       let title = "Suscripción Mensual - GSM FIX";
-      let price = 30000; // Precio real mensual
+      let price = 30000; 
 
       if (planId === 'semi_annual') {
         title = "Suscripción Semestral - GSM FIX";
-        price = 20; // Dejar en 20 para tus pruebas, cambiar a 160000 luego
+        price = 160000; 
       } else if (planId === 'annual') {
         title = "Suscripción Anual - GSM FIX";
-        price = 30; // Dejar en 30 para tus pruebas, cambiar a 300000 luego
+        price = 300000; 
       }
 
       let baseUrl = process.env.CLIENT_URL || process.env.BASE_URL;
@@ -156,7 +156,6 @@ export async function registerRoutes(server: Server, app: Express) {
             },
           ],
           external_reference: user.id,
-          // 👇 IMPORTANTE: Guardamos qué plan es en la metadata
           metadata: {
             plan_id: planId
           },

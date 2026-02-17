@@ -345,7 +345,7 @@ export async function registerRoutes(server: Server, app: Express) {
       // Enviar con Resend
       const { data, error } = await resend.emails.send({
         from: 'Soporte GSM FIX <onboarding@resend.dev>', // Usar este mientras no verifiques dominio
-        to: process.env.GMAIL_USER || 'tu-email-admin@gmail.com', // Donde recibes los tickets
+        to: process.env.GMAIL_USER || 'gsmfix.ar@gmail.com', // Donde recibes los tickets
         subject: `Ticket Soporte: ${userEmail}`,
         html: `
           <h3>Nuevo Ticket de Soporte</h3>

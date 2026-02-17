@@ -30,7 +30,8 @@ import SettingsPage from "@/pages/settings";
 import LandingPage from "@/pages/landing/home";
 import Login from "@/pages/auth-login";
 import Register from "@/pages/auth-register";
-import LegalPage from "@/components/marketing/legal"; 
+import LegalPage from "@/components/marketing/legal";
+import ResetPasswordPage from "@/pages/reset-password"; // 👈 1. IMPORTADO
 
 function App() {
   const [location] = useLocation();
@@ -40,7 +41,8 @@ function App() {
     location === "/" ||
     location === "/login" ||
     location === "/register" ||
-    location === "/legal" || // 👈 2. AGREGADO A PÚBLICAS
+    location === "/legal" ||
+    location === "/reset-password" || // 👈 2. AGREGADO A PÚBLICAS
     location.startsWith("/auth");
 
   const sidebarStyle = {
@@ -52,13 +54,14 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         {isPublicRoute ? (
-          /* 1. RUTAS PÚBLICAS (Landing, Login, Register, LEGALES) */
+          /* 1. RUTAS PÚBLICAS (Landing, Login, Register, LEGALES, RESET) */
           <Switch>
             <Route path="/" component={LandingPage} />
-            <Route path="/legal" component={LegalPage} /> {/* 👈 3. RUTA NUEVA */}
+            <Route path="/legal" component={LegalPage} />
 
             <Route path="/login" component={Login} />
             <Route path="/register" component={Register} />
+            <Route path="/reset-password" component={ResetPasswordPage} /> {/* 👈 3. RUTA NUEVA */}
 
             <Route path="/auth" component={Login} />
             <Route path="/auth/login" component={Login} />
@@ -83,14 +86,10 @@ function App() {
                         /* USAMOS UN SWITCH AQUÍ PARA SEPARAR EL ÉXITO DEL RESTO */
                         <Switch>
 
-                          {/* ✅ RUTA 1: PAGO EXITOSO 
-                              (Esta va PRIMERO y SIN SubscriptionGuard para evitar bloqueos por delay en la BD) 
-                          */}
+                          {/* ✅ RUTA 1: PAGO EXITOSO */}
                           <Route path="/payment-success" component={PaymentSuccess} />
 
-                          {/* 🔒 RUTA 2: EL RESTO DE LA APP (Candado Activo)
-                              Si la ruta no es /payment-success, cae aquí y se le aplica el Guard.
-                          */}
+                          {/* 🔒 RUTA 2: EL RESTO DE LA APP (Candado Activo) */}
                           <Route>
                             <SubscriptionGuard>
                               <Switch>

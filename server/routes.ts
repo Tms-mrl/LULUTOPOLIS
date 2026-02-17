@@ -125,14 +125,14 @@ export async function registerRoutes(server: Server, app: Express) {
       // Definir Precios y Plan
       const { planId } = req.body;
       let title = "Suscripción Mensual - GSM FIX";
-      let price = 30000; 
+      let price = 30000;
 
       if (planId === 'semi_annual') {
         title = "Suscripción Semestral - GSM FIX";
-        price = 160000; 
+        price = 160000;
       } else if (planId === 'annual') {
         title = "Suscripción Anual - GSM FIX";
-        price = 300000; 
+        price = 300000;
       }
 
       let baseUrl = process.env.CLIENT_URL || process.env.BASE_URL;
@@ -198,11 +198,11 @@ export async function registerRoutes(server: Server, app: Express) {
           console.log(`✅ Pago aprobado de: ${payment.payer?.email}`);
 
           const userId = payment.external_reference;
-          
+
           // 👇 MAGIA: Leemos el plan directamente de la metadata
           // Si por alguna razón no viene, asumimos 'monthly'
           const planId = payment.metadata?.plan_id || 'monthly';
-          
+
           console.log(`📦 Plan detectado por Metadata: ${planId}`);
 
           if (userId) {
@@ -224,11 +224,11 @@ export async function registerRoutes(server: Server, app: Express) {
               // Calcular fecha de vencimiento
               const now = new Date();
               const currentExpiry = user.currentPeriodEnd ? new Date(user.currentPeriodEnd) : now;
-              
+
               // Si la suscripción ya venció (fecha pasada), empezamos a contar desde HOY.
               // Si sigue vigente (fecha futura), sumamos a la fecha futura.
               const baseDate = currentExpiry > now ? currentExpiry : now;
-              
+
               // Sumar los meses correspondientes
               baseDate.setMonth(baseDate.getMonth() + monthsToAdd);
 
@@ -433,14 +433,49 @@ export async function registerRoutes(server: Server, app: Express) {
     try {
       const { message, imageUrls } = req.body;
       const u = await getUserId(req);
+
       let username = "Usuario";
-      if (u !== "guest-user-no-access") { username = `Usuario (ID: ${u})`; }
-      if (!process.env.GMAIL_USER || !process.env.GMAIL_PASS) { return res.status(500).json({ error: "Configuration Error: Missing Email Credentials" }); }
-      const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_PASS } });
-      const mailOptions = { from: process.env.GMAIL_USER, to: process.env.GMAIL_USER, subject: `Ticket de Soporte - ${username}`, html: `<h3>Nuevo Mensaje de Soporte</h3><p><strong>Usuario:</strong> ${username}</p><p><strong>Mensaje:</strong></p><p style="white-space: pre-wrap;">${message}</p>${imageUrls && imageUrls.length > 0 ? `<hr/><p><strong>Imágenes Adjuntas:</strong></p><ul>${imageUrls.map((url: string) => `<li><a href="${url}">${url}</a></li>`).join('')}</ul>` : ''}` };
+      if (u !== "guest-user-no-access") {
+        username = `Usuario (ID: ${u})`;
+      }
+
+      if (!process.env.GMAIL_USER || !process.env.GMAIL_PASS) {
+        return res.status(500).json({ error: "Configuration Error: Missing Email Credentials" });
+      }
+
+      // 👇 CORRECCIÓN CLAVE AQUÍ: Usamos configuración explícita SSL
+      const transporter = nodemailer.createTransport({
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true, // true para el puerto 465, false para otros
+        auth: {
+          user: process.env.GMAIL_USER,
+          pass: process.env.GMAIL_PASS
+        }
+      });
+
+      const mailOptions = {
+        from: process.env.GMAIL_USER,
+        to: process.env.GMAIL_USER,
+        subject: `Ticket de Soporte - ${username}`,
+        html: `
+          <h3>Nuevo Mensaje de Soporte</h3>
+          <p><strong>Usuario:</strong> ${username}</p>
+          <p><strong>Mensaje:</strong></p>
+          <p style="white-space: pre-wrap;">${message}</p>
+          ${imageUrls && imageUrls.length > 0
+            ? `<hr/><p><strong>Imágenes Adjuntas:</strong></p><ul>${imageUrls.map((url: string) => `<li><a href="${url}">${url}</a></li>`).join('')}</ul>`
+            : ''}
+        `
+      };
+
       await transporter.sendMail(mailOptions);
       res.json({ success: true, message: "Email sent successfully" });
-    } catch (e: any) { res.status(500).json({ error: "Error sending email: " + e.message }); }
+
+    } catch (e: any) {
+      console.error("Nodemailer error:", e); // Log para ver el error real en consola
+      res.status(500).json({ error: "Error sending email: " + e.message });
+    }
   });
 
   app.get("/api/reports/monthly-detail", async (req, res) => {

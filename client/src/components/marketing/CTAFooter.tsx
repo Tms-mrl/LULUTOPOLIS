@@ -61,7 +61,7 @@ const CTAFooter = () => {
                 onClick={handleLogoClick}
               >
                 {/* Imagen limpia */}
-                <div className="relative w-16 h-16 flex items-center justify-center">
+                <div className="relative w-20 h-20 flex items-center justify-center">
                   <img
                     src="/favilogo.PNG"
                     alt="Logo"

@@ -8,8 +8,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -32,22 +32,20 @@ import {
     Scale,
     CreditCard,
     Wrench,
-    Smartphone,
     Mail,
     MapPin,
     Phone,
     Zap,
     ShieldCheck,
-    Calendar,
     Check,
-    Star,
     Lock,
     Home,
-    ArrowDown
+    Smartphone
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useLocation } from "wouter";
 
+// Definimos los tipos de periodo que usa el FRONTEND (Visualmente)
 type BillingPeriod = 'monthly' | 'semester' | 'annual';
 
 export default function SettingsPage() {
@@ -55,10 +53,15 @@ export default function SettingsPage() {
     const queryClient = useQueryClient();
     const [, setLocation] = useLocation();
 
-    // Leer parámetros de URL
+    // 1. LÓGICA DE URL MEJORADA
+    // Convertimos lo que venga de la URL (ej: semi_annual) al formato interno (semester)
     const searchParams = new URLSearchParams(window.location.search);
     const initialTab = searchParams.get("tab") || "general";
-    const initialPeriod = (searchParams.get("period") as BillingPeriod) || "monthly";
+
+    let urlPeriod = searchParams.get("period");
+    if (urlPeriod === 'semi_annual') urlPeriod = 'semester'; // Corrección automática
+
+    const initialPeriod = (urlPeriod as BillingPeriod) || "monthly";
 
     const { session, signOut } = useAuth();
 
@@ -167,16 +170,20 @@ export default function SettingsPage() {
         }
     };
 
+    // 2. CHECKOUT CORREGIDO
     const handleCheckout = async (planType: string) => {
         let backendPlanId = "";
 
         if (planType === "standard") {
+            // Mapeamos el estado visual (semester) al ID real del backend (semi_annual)
             if (billingPeriod === "monthly") backendPlanId = "monthly";
             if (billingPeriod === "semester") backendPlanId = "semi_annual";
             if (billingPeriod === "annual") backendPlanId = "annual";
         } else {
             return;
         }
+
+        console.log("Iniciando checkout con plan:", backendPlanId); // Debug
 
         try {
             setLoadingCheckout(true);

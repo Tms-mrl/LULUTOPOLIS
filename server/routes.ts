@@ -14,7 +14,6 @@ import {
 import { createClient } from "@supabase/supabase-js";
 import multer from "multer";
 import nodemailer from "nodemailer";
-// Importamos Payment también para verificar el estado real
 import { MercadoPagoConfig, Preference, Payment } from 'mercadopago';
 
 const upload = multer({
@@ -72,7 +71,6 @@ export async function registerRoutes(server: Server, app: Express) {
 
       let dbUser = await storage.getUser(user.id);
 
-      // Lazy Init: Create if not exists
       if (!dbUser) {
         const trialEndsAt = new Date();
         trialEndsAt.setDate(trialEndsAt.getDate() + 7);
@@ -114,7 +112,6 @@ export async function registerRoutes(server: Server, app: Express) {
   // =========================================================
   app.post("/api/checkout", async (req, res) => {
     try {
-      // Verificación de Seguridad
       const authHeader = req.headers.authorization;
       if (!authHeader) return res.status(401).json({ error: "No token provided" });
 
@@ -125,29 +122,26 @@ export async function registerRoutes(server: Server, app: Express) {
         return res.status(401).json({ error: "Unauthorized: Invalid token" });
       }
 
-      // Definir Precios
+      // Definir Precios y Plan
       const { planId } = req.body;
       let title = "Suscripción Mensual - GSM FIX";
-      let price = 30000;
+      let price = 30000; // Precio real mensual
 
       if (planId === 'semi_annual') {
         title = "Suscripción Semestral - GSM FIX";
-        price = 20;
+        price = 20; // Dejar en 20 para tus pruebas, cambiar a 160000 luego
       } else if (planId === 'annual') {
         title = "Suscripción Anual - GSM FIX";
-        price = 30;
+        price = 30; // Dejar en 30 para tus pruebas, cambiar a 300000 luego
       }
 
-      // Definir URLs
-      // BASE_URL: A donde vuelve el usuario (Frontend)
-      // WEBHOOK_URL: A donde avisa Mercado Pago (Backend - Solo funciona en Prod o ngrok)
-      let baseUrl = process.env.BASE_URL;
+      let baseUrl = process.env.CLIENT_URL || process.env.BASE_URL;
       if (!baseUrl) baseUrl = "http://localhost:5173";
       baseUrl = baseUrl.replace(/\/$/, "");
 
-      const webhookUrl = process.env.WEBHOOK_URL; // Esta variable la configurarás en Railway
+      const webhookUrl = process.env.WEBHOOK_URL;
 
-      console.log(`🚀 Creando pago MP | Plan: ${planId} | User: ${user.email}`);
+      console.log(`🚀 Creando pago MP | Plan: ${planId} | Precio: ${price} | User: ${user.email}`);
 
       const preference = new Preference(mpClient);
       const result = await preference.create({
@@ -161,15 +155,18 @@ export async function registerRoutes(server: Server, app: Express) {
               currency_id: 'ARS',
             },
           ],
-          external_reference: user.id, // ID Usuario
+          external_reference: user.id,
+          // 👇 IMPORTANTE: Guardamos qué plan es en la metadata
+          metadata: {
+            plan_id: planId
+          },
           back_urls: {
             success: `${baseUrl}/payment-success?planId=${planId}`,
             failure: `${baseUrl}/plan-expired`,
             pending: `${baseUrl}/plan-expired`
           },
-          // Si existe WEBHOOK_URL (en Railway), lo usa. Si no (localhost), no lo manda.
           notification_url: webhookUrl ? `${webhookUrl}/api/webhooks/mercadopago` : undefined,
-          // auto_return: 'approved', // Comentado para evitar errores en dev
+          auto_return: 'approved',
         }
       });
 
@@ -181,18 +178,20 @@ export async function registerRoutes(server: Server, app: Express) {
   });
 
   // =========================================================
-  // 2. WEBHOOK REAL (Se usará en Producción/Railway)
+  // 2. WEBHOOK REAL (Recibe el aviso y activa el plan)
   // =========================================================
   app.post("/api/webhooks/mercadopago", async (req, res) => {
     const { type, data } = req.body;
+    const action = req.body.action;
 
-    // Solo procesamos si es un pago
-    if (type === "payment" || req.body.action === "payment.created") {
+    // Responder rápido a MP para que deje de enviar la notificación
+    res.status(200).send("OK");
+
+    if (type === "payment" || action === "payment.created") {
       try {
         const id = data?.id || req.body.data?.id;
         console.log("🔔 Webhook recibido! ID Pago:", id);
 
-        // Consultamos a MP el estado real para evitar fraudes
         const paymentClient = new Payment(mpClient);
         const payment = await paymentClient.get({ id: id });
 
@@ -200,28 +199,38 @@ export async function registerRoutes(server: Server, app: Express) {
           console.log(`✅ Pago aprobado de: ${payment.payer?.email}`);
 
           const userId = payment.external_reference;
-          const amount = payment.transaction_amount;
+          
+          // 👇 MAGIA: Leemos el plan directamente de la metadata
+          // Si por alguna razón no viene, asumimos 'monthly'
+          const planId = payment.metadata?.plan_id || 'monthly';
+          
+          console.log(`📦 Plan detectado por Metadata: ${planId}`);
 
           if (userId) {
             let monthsToAdd = 1;
             let billingInterval: 'monthly' | 'semi_annual' | 'annual' = 'monthly';
 
-            if (amount && amount >= 150000) { // Lógica simple basada en montos
-              if (amount >= 300000) {
-                monthsToAdd = 12;
-                billingInterval = 'annual';
-              } else {
-                monthsToAdd = 6;
-                billingInterval = 'semi_annual';
-              }
+            // Lógica exacta basada en el ID, no en el precio
+            if (planId === 'annual') {
+              monthsToAdd = 12;
+              billingInterval = 'annual';
+            } else if (planId === 'semi_annual') {
+              monthsToAdd = 6;
+              billingInterval = 'semi_annual';
             }
 
             // Actualizar DB
             const user = await storage.getUser(userId);
             if (user) {
-              const currentExpiry = user.currentPeriodEnd ? new Date(user.currentPeriodEnd) : new Date();
-              // Si ya venció, usar fecha actual. Si no, sumar al vencimiento.
-              const baseDate = currentExpiry > new Date() ? currentExpiry : new Date();
+              // Calcular fecha de vencimiento
+              const now = new Date();
+              const currentExpiry = user.currentPeriodEnd ? new Date(user.currentPeriodEnd) : now;
+              
+              // Si la suscripción ya venció (fecha pasada), empezamos a contar desde HOY.
+              // Si sigue vigente (fecha futura), sumamos a la fecha futura.
+              const baseDate = currentExpiry > now ? currentExpiry : now;
+              
+              // Sumar los meses correspondientes
               baseDate.setMonth(baseDate.getMonth() + monthsToAdd);
 
               await storage.updateUser(userId, {
@@ -230,7 +239,7 @@ export async function registerRoutes(server: Server, app: Express) {
                 currentPeriodEnd: baseDate,
                 isAutoRenew: true
               });
-              console.log(`🎉 Usuario ${userId} renovado hasta ${baseDate.toISOString()}`);
+              console.log(`🎉 Usuario ${userId} renovado (${monthsToAdd} meses) hasta ${baseDate.toISOString()}`);
             }
           }
         }
@@ -238,25 +247,19 @@ export async function registerRoutes(server: Server, app: Express) {
         console.error("Error procesando webhook:", error);
       }
     }
-    res.status(200).send("OK");
   });
 
   // =========================================================
-  // 3. SIMULACIÓN (Para Localhost - SE BORRA O PROTEGE EN PROD)
+  // 3. SIMULACIÓN (Para Localhost)
   // =========================================================
   app.get("/api/test/simulate-payment/:userId/:planId", async (req, res) => {
     try {
       const { userId, planId } = req.params;
-
-      // En producción, aquí deberíamos validar que el usuario sea admin
-      // o eliminar este endpoint por completo.
-
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ error: "User not found" });
 
-      let months = 0;
-      if (planId === "monthly") months = 1;
-      else if (planId === "semi_annual") months = 6;
+      let months = 1;
+      if (planId === "semi_annual") months = 6;
       else if (planId === "annual") months = 12;
 
       const newExpiry = new Date();
@@ -271,7 +274,6 @@ export async function registerRoutes(server: Server, app: Express) {
 
       res.json({ success: true, new_expiry: newExpiry });
     } catch (e) {
-      console.error("Simulation error:", e);
       res.status(500).json({ error: "Simulation failed" });
     }
   });
@@ -364,10 +366,6 @@ export async function registerRoutes(server: Server, app: Express) {
     }
   });
 
-  // =========================================================
-  // GESTIÓN DE CAJA INICIAL
-  // =========================================================
-
   app.get("/api/cash/today", async (req, res) => {
     try {
       const u = await getUserId(req);
@@ -385,19 +383,10 @@ export async function registerRoutes(server: Server, app: Express) {
     try {
       const u = await getUserId(req);
       const parseResult = insertDailyCashSchema.pick({ amount: true }).safeParse(req.body);
-
-      if (!parseResult.success) {
-        return res.status(400).json({ error: parseResult.error.errors });
-      }
-
+      if (!parseResult.success) { return res.status(400).json({ error: parseResult.error.errors }); }
       const settings = await storage.getSettings(u);
       const dateStr = getShiftDate(settings);
-
-      const result = await storage.upsertDailyCash(u, {
-        date: dateStr,
-        amount: parseResult.data.amount
-      });
-
+      const result = await storage.upsertDailyCash(u, { date: dateStr, amount: parseResult.data.amount });
       res.json(result);
     } catch (e) {
       console.error("Error guardando caja:", e);
@@ -420,60 +409,21 @@ export async function registerRoutes(server: Server, app: Express) {
   app.post("/api/settings", async (req, res) => { try { const p = insertSettingsSchema.safeParse(req.body); if (!p.success) return res.status(400).json({ error: p.error.errors }); const u = await getUserId(req); res.json(await storage.updateSettings(u, p.data)); } catch (e) { res.status(500).json({ error: "Error" }); } });
 
   app.get("/api/products", async (req, res) => { try { const u = await getUserId(req); const products = await storage.getProducts(u); res.json(products); } catch (e) { res.status(500).json({ error: "Error" }); } });
-
-  app.post("/api/products", async (req, res) => {
-    try {
-      const p = insertProductSchema.safeParse(req.body);
-      if (!p.success) return res.status(400).json({ error: p.error.errors });
-      const u = await getUserId(req);
-      res.status(201).json(await storage.createProduct({ ...p.data, userId: u, user_id: u } as any));
-    } catch (e) { res.status(500).json({ error: "Error" }); }
-  });
-
-  app.patch("/api/products/:id", async (req, res) => {
-    try {
-      const u = await storage.updateProduct(req.params.id, req.body);
-      if (!u) return res.status(404).json({ error: "Not found" });
-      res.json(u);
-    } catch (e) { res.status(500).json({ error: "Error" }); }
-  });
-
+  app.post("/api/products", async (req, res) => { try { const p = insertProductSchema.safeParse(req.body); if (!p.success) return res.status(400).json({ error: p.error.errors }); const u = await getUserId(req); res.status(201).json(await storage.createProduct({ ...p.data, userId: u, user_id: u } as any)); } catch (e) { res.status(500).json({ error: "Error" }); } });
+  app.patch("/api/products/:id", async (req, res) => { try { const u = await storage.updateProduct(req.params.id, req.body); if (!u) return res.status(404).json({ error: "Not found" }); res.json(u); } catch (e) { res.status(500).json({ error: "Error" }); } });
   app.delete("/api/products/:id", async (req, res) => { try { const u = await getUserId(req); await storage.deleteProduct(req.params.id, u); res.sendStatus(204); } catch (e) { res.status(500).json({ error: "Error deleting product" }); } });
-
 
   app.post("/api/upload", upload.single("file"), async (req: any, res: any) => {
     try {
-      // 1. Validar que llegó un archivo
       if (!req.file) return res.status(400).json({ message: "No se subió ningún archivo" });
-
       const file = req.file;
       const fileExt = file.originalname.split('.').pop();
-
-      // 2. Generar nombre único (para no sobrescribir si suben 2 fotos con el mismo nombre)
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
       const filePath = `${fileName}`;
-
-      // 3. Subir a Supabase Storage (Bucket 'logos')
-      const { data, error } = await supabase.storage
-        .from('logos') // <--- AQUI USAMOS TU BUCKET EXISTENTE
-        .upload(filePath, file.buffer, {
-          contentType: file.mimetype,
-          upsert: false
-        });
-
-      if (error) {
-        console.error("Error de Supabase Storage:", error);
-        throw new Error("No se pudo guardar en el storage: " + error.message);
-      }
-
-      // 4. Obtener la URL Pública para guardarla en la Base de Datos
-      const { data: publicUrlData } = supabase.storage
-        .from('logos')
-        .getPublicUrl(filePath);
-
-      // Devuelve la URL corta (ej: https://.../logos/archivo.png)
+      const { data, error } = await supabase.storage.from('logos').upload(filePath, file.buffer, { contentType: file.mimetype, upsert: false });
+      if (error) { console.error("Error de Supabase Storage:", error); throw new Error("No se pudo guardar en el storage: " + error.message); }
+      const { data: publicUrlData } = supabase.storage.from('logos').getPublicUrl(filePath);
       res.json({ url: publicUrlData.publicUrl });
-
     } catch (error: any) {
       console.error("Error en upload:", error);
       res.status(500).json({ message: "Error al procesar la imagen: " + error.message });
@@ -486,88 +436,33 @@ export async function registerRoutes(server: Server, app: Express) {
       const u = await getUserId(req);
       let username = "Usuario";
       if (u !== "guest-user-no-access") { username = `Usuario (ID: ${u})`; }
-
-      if (!process.env.GMAIL_USER || !process.env.GMAIL_PASS) {
-        return res.status(500).json({ error: "Configuration Error: Missing Email Credentials" });
-      }
-
-      const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_PASS }
-      });
-
-      const mailOptions = {
-        from: process.env.GMAIL_USER,
-        to: process.env.GMAIL_USER,
-        subject: `Ticket de Soporte - ${username}`,
-        html: `<h3>Nuevo Mensaje de Soporte</h3><p><strong>Usuario:</strong> ${username}</p><p><strong>Mensaje:</strong></p><p style="white-space: pre-wrap;">${message}</p>${imageUrls && imageUrls.length > 0 ? `<hr/><p><strong>Imágenes Adjuntas:</strong></p><ul>${imageUrls.map((url: string) => `<li><a href="${url}">${url}</a></li>`).join('')}</ul>` : ''}`
-      };
-
+      if (!process.env.GMAIL_USER || !process.env.GMAIL_PASS) { return res.status(500).json({ error: "Configuration Error: Missing Email Credentials" }); }
+      const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_PASS } });
+      const mailOptions = { from: process.env.GMAIL_USER, to: process.env.GMAIL_USER, subject: `Ticket de Soporte - ${username}`, html: `<h3>Nuevo Mensaje de Soporte</h3><p><strong>Usuario:</strong> ${username}</p><p><strong>Mensaje:</strong></p><p style="white-space: pre-wrap;">${message}</p>${imageUrls && imageUrls.length > 0 ? `<hr/><p><strong>Imágenes Adjuntas:</strong></p><ul>${imageUrls.map((url: string) => `<li><a href="${url}">${url}</a></li>`).join('')}</ul>` : ''}` };
       await transporter.sendMail(mailOptions);
       res.json({ success: true, message: "Email sent successfully" });
-    } catch (e: any) {
-      res.status(500).json({ error: "Error sending email: " + e.message });
-    }
+    } catch (e: any) { res.status(500).json({ error: "Error sending email: " + e.message }); }
   });
 
   app.get("/api/reports/monthly-detail", async (req, res) => {
     try {
       const u = await getUserId(req);
       const { month, year } = req.query;
-
-      if (!month || !year) {
-        return res.status(400).json({ error: "Month and year are required" });
-      }
-
+      if (!month || !year) { return res.status(400).json({ error: "Month and year are required" }); }
       const targetMonth = parseInt(month as string) - 1;
       const targetYear = parseInt(year as string);
-
       const allPayments = await storage.getPaymentsWithOrders(u);
-      const monthlyPayments = allPayments.filter(p => {
-        const d = new Date(p.date);
-        return d.getMonth() === targetMonth && d.getFullYear() === targetYear;
-      });
-
+      const monthlyPayments = allPayments.filter(p => { const d = new Date(p.date); return d.getMonth() === targetMonth && d.getFullYear() === targetYear; });
       const allExpenses = await storage.getExpenses(u);
-      const monthlyExpenses = allExpenses.filter(e => {
-        const d = new Date(e.date);
-        return d.getMonth() === targetMonth && d.getFullYear() === targetYear;
-      });
-
+      const monthlyExpenses = allExpenses.filter(e => { const d = new Date(e.date); return d.getMonth() === targetMonth && d.getFullYear() === targetYear; });
       const incomeByMethod: Record<string, number> = {};
       let totalIncome = 0;
-
-      monthlyPayments.forEach(p => {
-        const amount = Number(p.amount);
-        const method = p.method || "Otros";
-        incomeByMethod[method] = (incomeByMethod[method] || 0) + amount;
-        totalIncome += amount;
-      });
-
+      monthlyPayments.forEach(p => { const amount = Number(p.amount); const method = p.method || "Otros"; incomeByMethod[method] = (incomeByMethod[method] || 0) + amount; totalIncome += amount; });
       const totalExpenses = monthlyExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
-
       const startDate = new Date(targetYear, targetMonth, 1);
       const endDate = new Date(targetYear, targetMonth + 1, 0);
-
-      res.json({
-        period: {
-          month: targetMonth + 1,
-          year: targetYear,
-          startDate: startDate.toISOString(),
-          endDate: endDate.toISOString()
-        },
-        incomeByMethod: Object.entries(incomeByMethod).map(([method, total]) => ({ method, total })),
-        totals: {
-          income: totalIncome,
-          expenses: totalExpenses,
-          balance: totalIncome - totalExpenses
-        }
-      });
-
-    } catch (e) {
-      console.error("Error generando reporte mensual detallado:", e);
-      res.status(500).json({ error: "Error interno al generar el reporte" });
-    }
+      res.json({ period: { month: targetMonth + 1, year: targetYear, startDate: startDate.toISOString(), endDate: endDate.toISOString() }, incomeByMethod: Object.entries(incomeByMethod).map(([method, total]) => ({ method, total })), totals: { income: totalIncome, expenses: totalExpenses, balance: totalIncome - totalExpenses } });
+    } catch (e) { console.error("Error generando reporte mensual detallado:", e); res.status(500).json({ error: "Error interno al generar el reporte" }); }
   });
 
   return server;

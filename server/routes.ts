@@ -453,25 +453,15 @@ export async function registerRoutes(server: Server, app: Express) {
       }
 
       const transporter = nodemailer.createTransport({
-        host: "smtp.gmail.com",
-        port: 587,
-        secure: false,
+        service: 'gmail', // Usamos el preset interno
         auth: {
           user: process.env.GMAIL_USER,
           pass: process.env.GMAIL_PASS
         },
-        tls: {
-          rejectUnauthorized: false,
-          minVersion: 'TLSv1.2' // Forzar una versión de TLS compatible
-        },
-        family: 4,
-        // 👇 CONFIGURACIÓN ANTI-BLOQUEO
-        connectionTimeout: 10000, // 10 segundos máximo para conectar
-        greetingTimeout: 10000,   // 10 segundos para el saludo inicial
-        socketTimeout: 10000,     // 10 segundos de inactividad
-        logger: true,
-        debug: true
+        // Forzamos IPv4 porque el timeout suele ser por IPv6
+        family: 4
       } as any);
+
       const mailOptions = {
         from: process.env.GMAIL_USER,
         to: process.env.GMAIL_USER,

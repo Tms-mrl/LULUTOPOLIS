@@ -1,136 +1,99 @@
-import "dotenv/config";
+import path from "path";
+import fs from "fs";
+import dotenv from "dotenv";
+
+// 1. CARGA DE VARIABLES DE ENTORNO
+// Buscamos el archivo .env explícitamente en la raíz para evitar errores de ruta
+const envPath = path.resolve(process.cwd(), ".env");
+
+if (fs.existsSync(envPath)) {
+  dotenv.config({ path: envPath });
+} else {
+  // Si no existe (ej: en producción Railway sin archivo físico), usamos las variables del sistema
+  dotenv.config();
+}
+
+// 2. IMPORTS DEL SISTEMA
 import express, { type Request, Response, NextFunction } from "express";
-import cors from "cors";
-import { registerRoutes } from "./routes";
-import { serveStatic } from "./static";
 import { createServer } from "http";
+import cors from "cors";
 
 const app = express();
 
-// --- CONFIGURACIÓN DE CORS FINAL Y CORREGIDA ---
+// Configuración para permitir archivos pesados (imágenes base64)
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: false, limit: '50mb' }));
+
+// Configuración de Seguridad CORS
 app.use(cors({
   origin: (origin, callback) => {
-    // 1. Permitir peticiones sin origen (como Postman o Server-to-Server)
+    // Permitir requests sin origen (como apps móviles o Postman)
     if (!origin) return callback(null, true);
 
-    // 2. Permitir Localhost (tu PC en desarrollo)
-    if (origin.startsWith("http://localhost")) {
+    // Permitir Localhost y Vercel (Desarrollo y Previews)
+    if (origin.startsWith("http://localhost") || origin.endsWith(".vercel.app")) {
       return callback(null, true);
     }
 
-    // 3. Permitir CUALQUIER dominio de Vercel (para pruebas y previews)
-    if (origin.endsWith(".vercel.app")) {
-      return callback(null, true);
-    }
+    // Permitir Dominios de Producción
+    const allowedDomains = ['https://gsm-proyect.com', 'https://www.gsm-proyect.com'];
+    if (allowedDomains.includes(origin)) return callback(null, true);
 
-    // 4. 👇 NUEVO: Permitir TU dominio oficial (Producción)
-    const allowedDomains = [
-      'https://gsm-proyect.com',
-      'https://www.gsm-proyect.com'
-    ];
-
-    if (allowedDomains.includes(origin)) {
-      return callback(null, true);
-    }
-
-    // Si no cumple nada de lo anterior, bloqueamos
+    // Bloquear el resto
     console.log(`🚫 Bloqueado por CORS: ${origin}`);
     callback(new Error('Not allowed by CORS'));
   },
   credentials: true
 }));
-// ------------------------------------
 
-const httpServer = createServer(app);
-
-declare module "http" {
-  interface IncomingMessage {
-    rawBody: unknown;
-  }
-}
-
-// -----------------------------------------------------------------------
-// 🔴 MODIFICACIÓN: AUMENTO DE LÍMITE A 50MB
-// -----------------------------------------------------------------------
-app.use(
-  express.json({
-    limit: '50mb', // <--- ESTO PERMITE LOGOS PESADOS EN BASE64
-    verify: (req, _res, buf) => {
-      req.rawBody = buf;
-    },
-  }),
-);
-
-app.use(express.urlencoded({ extended: false, limit: '50mb' })); // <--- TAMBIÉN AQUÍ
-
-export function log(message: string, source = "express") {
-  const formattedTime = new Date().toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-  });
-
-  console.log(`${formattedTime} [${source}] ${message}`);
-}
-
+// Logging básico de peticiones API (para ver qué pasa en la consola)
 app.use((req, res, next) => {
   const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
-
   res.on("finish", () => {
-    const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      log(logLine);
+    if (req.path.startsWith("/api")) {
+      const duration = Date.now() - start;
+      console.log(`${req.method} ${req.path} ${res.statusCode} in ${duration}ms`);
     }
   });
-
   next();
 });
 
+const httpServer = createServer(app);
+
+// 3. ARRANQUE DEL SERVIDOR (ASÍNCRONO)
+// Usamos importación dinámica para asegurar que las variables de entorno
+// estén cargadas ANTES de importar las rutas (esto evita el error de Supabase).
 (async () => {
-  await registerRoutes(httpServer, app);
+  try {
+    const { registerRoutes } = await import("./routes");
+    const { serveStatic } = await import("./static");
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+    await registerRoutes(httpServer, app);
 
-    res.status(status).json({ message });
-    throw err;
-  });
+    // Manejo global de errores
+    app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+      const status = err.status || err.statusCode || 500;
+      const message = err.message || "Internal Server Error";
+      console.error("Error del servidor:", err); // Solo logueamos errores reales
+      res.status(status).json({ message });
+    });
 
-  if (process.env.NODE_ENV === "production") {
-    serveStatic(app);
-  } else {
-    const { setupVite } = await import("./vite");
-    await setupVite(httpServer, app);
+    // Configuración de Vite (Dev) vs Static (Prod)
+    if (process.env.NODE_ENV === "production") {
+      serveStatic(app);
+    } else {
+      const { setupVite } = await import("./vite");
+      await setupVite(httpServer, app);
+    }
+
+    // Iniciar escucha
+    const port = parseInt(process.env.PORT || "5001", 10);
+    httpServer.listen(port, "0.0.0.0", () => {
+      console.log(`🚀 Servidor corriendo en el puerto ${port}`);
+    });
+
+  } catch (error) {
+    console.error("❌ Error fatal al iniciar el servidor:", error);
+    process.exit(1);
   }
-
-  const port = parseInt(process.env.PORT || "5001", 10);
-  const isWindows = process.platform === "win32";
-
-  httpServer.listen(
-    isWindows
-      ? port
-      : {
-        port,
-        host: "0.0.0.0",
-        reusePort: true,
-      },
-    () => {
-      log(`serving on port ${port}`);
-    },
-  );
 })();

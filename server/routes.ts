@@ -434,20 +434,28 @@ export async function registerRoutes(server: Server, app: Express) {
       const { message, imageUrls } = req.body;
       const u = await getUserId(req);
 
-      let username = "Usuario";
+      let userInfo = "Usuario Invitado / No logueado";
+      let userEmail = "No disponible";
+
       if (u !== "guest-user-no-access") {
-        username = `Usuario (ID: ${u})`;
+        // 👇 MAGIA NUEVA: Buscamos los datos reales del usuario en la DB
+        const userRecord = await storage.getUser(u);
+        if (userRecord) {
+          userInfo = `Usuario Registrado (ID: ${u})`;
+          userEmail = userRecord.email || "No disponible";
+        } else {
+          userInfo = `Usuario ID: ${u} (No encontrado en DB)`;
+        }
       }
 
       if (!process.env.GMAIL_USER || !process.env.GMAIL_PASS) {
         return res.status(500).json({ error: "Configuration Error: Missing Email Credentials" });
       }
 
-      // 👇 CORRECCIÓN CLAVE AQUÍ: Usamos configuración explícita SSL
       const transporter = nodemailer.createTransport({
         host: "smtp.gmail.com",
         port: 465,
-        secure: true, // true para el puerto 465, false para otros
+        secure: true,
         auth: {
           user: process.env.GMAIL_USER,
           pass: process.env.GMAIL_PASS
@@ -457,12 +465,16 @@ export async function registerRoutes(server: Server, app: Express) {
       const mailOptions = {
         from: process.env.GMAIL_USER,
         to: process.env.GMAIL_USER,
-        subject: `Ticket de Soporte - ${username}`,
+        // 👇 AGREGAMOS EL EMAIL AL ASUNTO PARA QUE LO VEAS RÁPIDO
+        subject: `Soporte: ${userEmail} - ${userInfo}`,
+        // 👇 AGREGAMOS EL EMAIL AL CUERPO DEL CORREO Y UN LINK MAILTO
         html: `
-          <h3>Nuevo Mensaje de Soporte</h3>
-          <p><strong>Usuario:</strong> ${username}</p>
+          <h3>Nuevo Ticket de Soporte</h3>
+          <p><strong>Usuario:</strong> ${userInfo}</p>
+          <p><strong>Email de Contacto:</strong> <a href="mailto:${userEmail}">${userEmail}</a></p>
+          <hr/>
           <p><strong>Mensaje:</strong></p>
-          <p style="white-space: pre-wrap;">${message}</p>
+          <p style="white-space: pre-wrap; background-color: #f4f4f4; padding: 10px; border-radius: 5px;">${message}</p>
           ${imageUrls && imageUrls.length > 0
             ? `<hr/><p><strong>Imágenes Adjuntas:</strong></p><ul>${imageUrls.map((url: string) => `<li><a href="${url}">${url}</a></li>`).join('')}</ul>`
             : ''}
@@ -473,7 +485,7 @@ export async function registerRoutes(server: Server, app: Express) {
       res.json({ success: true, message: "Email sent successfully" });
 
     } catch (e: any) {
-      console.error("Nodemailer error:", e); // Log para ver el error real en consola
+      console.error("Nodemailer error:", e);
       res.status(500).json({ error: "Error sending email: " + e.message });
     }
   });

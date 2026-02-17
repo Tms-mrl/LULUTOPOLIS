@@ -454,16 +454,19 @@ export async function registerRoutes(server: Server, app: Express) {
 
       const transporter = nodemailer.createTransport({
         host: "smtp.gmail.com",
-        port: 587,            // Usamos 587 en lugar de 465
-        secure: false,        // IMPORTANTE: false para puerto 587 (usa STARTTLS)
+        port: 587,
+        secure: false,
         auth: {
           user: process.env.GMAIL_USER,
           pass: process.env.GMAIL_PASS
         },
         tls: {
-          rejectUnauthorized: false // Ayuda a evitar errores de certificados en Railway
-        }
-      });
+          rejectUnauthorized: false
+        },
+        family: 4,      // IPv4 (Vital para Railway)
+        logger: true,   // Logs
+        debug: true     // Debug
+      } as any);
 
       const mailOptions = {
         from: process.env.GMAIL_USER,

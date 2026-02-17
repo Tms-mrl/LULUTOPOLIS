@@ -461,19 +461,21 @@ export async function registerRoutes(server: Server, app: Express) {
           pass: process.env.GMAIL_PASS
         },
         tls: {
-          rejectUnauthorized: false
+          rejectUnauthorized: false,
+          minVersion: 'TLSv1.2' // Forzar una versión de TLS compatible
         },
-        family: 4,      // IPv4 (Vital para Railway)
-        logger: true,   // Logs
-        debug: true     // Debug
+        family: 4,
+        // 👇 CONFIGURACIÓN ANTI-BLOQUEO
+        connectionTimeout: 10000, // 10 segundos máximo para conectar
+        greetingTimeout: 10000,   // 10 segundos para el saludo inicial
+        socketTimeout: 10000,     // 10 segundos de inactividad
+        logger: true,
+        debug: true
       } as any);
-
       const mailOptions = {
         from: process.env.GMAIL_USER,
         to: process.env.GMAIL_USER,
-        // 👇 AGREGAMOS EL EMAIL AL ASUNTO PARA QUE LO VEAS RÁPIDO
         subject: `Soporte: ${userEmail} - ${userInfo}`,
-        // 👇 AGREGAMOS EL EMAIL AL CUERPO DEL CORREO Y UN LINK MAILTO
         html: `
           <h3>Nuevo Ticket de Soporte</h3>
           <p><strong>Usuario:</strong> ${userInfo}</p>

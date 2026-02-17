@@ -4,8 +4,9 @@ import { PaymentModal } from "./payment-modal";
 import { useAuth } from "@/hooks/use-auth";
 
 export function ExpiredOverlay() {
-    const { user, signOut } = useAuth();
-    const [selectedPlan, setSelectedPlan] = useState<{ id: string, period: string } | null>(null);
+    const { signOut } = useAuth();
+    // Guardamos directamente el string del ID (ej: 'monthly', 'annual')
+    const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
 
     const plans = [
         {
@@ -17,7 +18,8 @@ export function ExpiredOverlay() {
             recommended: false
         },
         {
-            id: "semester",
+            // OJO: Cambiado de 'semester' a 'semi_annual' para coincidir con el Backend
+            id: "semi_annual",
             title: "Semestral",
             price: "$160.000",
             period: "cada 6 meses",
@@ -85,7 +87,8 @@ export function ExpiredOverlay() {
                             </ul>
 
                             <button
-                                onClick={() => setSelectedPlan({ id: 'standard', period: plan.id })}
+                                // CORRECCIÓN AQUÍ: Pasamos el ID real ('monthly', 'annual', etc.)
+                                onClick={() => setSelectedPlanId(plan.id)}
                                 className={`w-full py-3 rounded-lg font-semibold transition-colors ${plan.recommended
                                     ? "bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/25"
                                     : "bg-zinc-800 hover:bg-zinc-700 text-white"
@@ -112,11 +115,11 @@ export function ExpiredOverlay() {
             </div>
 
             {/* El Modal que se abre al elegir un plan */}
-            {selectedPlan && (
+            {selectedPlanId && (
                 <PaymentModal
                     open={true}
-                    planId={selectedPlan.id}
-                    onClose={() => setSelectedPlan(null)}
+                    planId={selectedPlanId} // Ahora enviamos el ID correcto
+                    onClose={() => setSelectedPlanId(null)}
                 />
             )}
         </div>

@@ -30,6 +30,7 @@ import SettingsPage from "@/pages/settings";
 import LandingPage from "@/pages/landing/home";
 import Login from "@/pages/auth-login";
 import Register from "@/pages/auth-register";
+import LegalPage from "@/components/marketing/legal"; 
 
 function App() {
   const [location] = useLocation();
@@ -39,6 +40,7 @@ function App() {
     location === "/" ||
     location === "/login" ||
     location === "/register" ||
+    location === "/legal" || // 👈 2. AGREGADO A PÚBLICAS
     location.startsWith("/auth");
 
   const sidebarStyle = {
@@ -50,9 +52,11 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         {isPublicRoute ? (
-          /* 1. RUTAS PÚBLICAS (Landing, Login, Register) */
+          /* 1. RUTAS PÚBLICAS (Landing, Login, Register, LEGALES) */
           <Switch>
             <Route path="/" component={LandingPage} />
+            <Route path="/legal" component={LegalPage} /> {/* 👈 3. RUTA NUEVA */}
+
             <Route path="/login" component={Login} />
             <Route path="/register" component={Register} />
 

@@ -1,8 +1,13 @@
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Mail, MessageCircle, Smartphone } from "lucide-react";
-import { Link } from "wouter"; 
+import { ArrowRight, Mail, MessageCircle } from "lucide-react";
+import { Link } from "wouter";
 
 const CTAFooter = () => {
+  // Función para subir al inicio
+  const handleLogoClick = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   return (
     <>
       {/* CTA Section */}
@@ -49,21 +54,26 @@ const CTAFooter = () => {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
             {/* Brand */}
             <div className="col-span-1 md:col-span-2">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="relative group">
-                  <div className="absolute -inset-0.5 bg-gradient-to-r from-primary/40 to-accent/40 rounded-full blur opacity-30 group-hover:opacity-60 transition-opacity duration-300"></div>
-                  {/* Si tienes el logo.png original en public, cambia Smartphone por: 
-                      <img src="/logo.png" alt="Logo" className="w-full h-full object-cover" /> 
-                  */}
-                  <div className="relative w-16 h-16 rounded-full overflow-hidden bg-background border border-border flex items-center justify-center">
-                    <Smartphone className="w-8 h-8 text-primary" />
-                  </div>
+
+              {/* LOGO MODIFICADO: Sin círculo, clic para subir */}
+              <div
+                className="flex items-center gap-3 mb-4 cursor-pointer hover:opacity-80 transition-opacity select-none"
+                onClick={handleLogoClick}
+              >
+                {/* Imagen limpia */}
+                <div className="relative w-16 h-16 flex items-center justify-center">
+                  <img
+                    src="/favilogo.PNG"
+                    alt="Logo"
+                    className="w-full h-full object-contain"
+                  />
                 </div>
                 <div>
                   <span className="text-xl font-bold text-foreground">GSM FIX</span>
                   <span className="block text-xs text-muted-foreground">Sistema de Gestión</span>
                 </div>
               </div>
+
               <p className="text-muted-foreground max-w-sm mb-4 text-sm">
                 El sistema de gestión más completo para talleres de reparación de dispositivos móviles.
               </p>
@@ -105,18 +115,16 @@ const CTAFooter = () => {
 
               <div className="flex flex-col sm:flex-row sm:items-center gap-3 text-xs text-muted-foreground mt-4 sm:mt-2">
                 <span>Desarrollado por <span className="text-primary font-medium">Rodrigo Roselli</span> y <span className="text-primary font-medium">Tomas Morelli</span></span>
-                
+
                 <div className="hidden sm:block h-4 w-[1px] bg-border mx-1"></div>
-                
-                {/* --- SECCIÓN DE LOGOS ACTIVADA --- */}
+
+                {/* --- SECCIÓN DE LOGOS --- */}
                 <div className="flex items-center gap-4 opacity-80 hover:opacity-100 transition-opacity mt-2 sm:mt-0">
                   <div className="flex items-center gap-2" title="Conarte">
-                    {/* Asegúrate de que el archivo esté en client/public/conarte-logo.png */}
                     <img src="/conarte-logo.png" alt="Conarte" className="h-8 w-auto grayscale hover:grayscale-0 transition-all" />
                   </div>
                   <div className="h-4 w-[1px] bg-border/50"></div>
                   <div className="flex items-center gap-2" title="Revolución">
-                    {/* Asegúrate de que el archivo esté en client/public/revolucion-logo.png */}
                     <img src="/revolucion-logo.png" alt="Revolución" className="h-8 w-auto grayscale hover:grayscale-0 transition-all" />
                   </div>
                 </div>
@@ -130,9 +138,9 @@ const CTAFooter = () => {
                 <span>Web Development by <a href="https://www.linkedin.com/in/mateocalvar/" target="_blank" rel="noopener noreferrer" className="text-primary font-medium hover:underline">Mateo Calvar</a></span>
               </div>
               <div className="flex items-center gap-6">
-                <Link href="#" className="text-sm text-muted-foreground hover:text-primary transition-colors">Términos</Link>
-                <Link href="#" className="text-sm text-muted-foreground hover:text-primary transition-colors">Privacidad</Link>
-                <Link href="#" className="text-sm text-muted-foreground hover:text-primary transition-colors">Cookies</Link>
+                <Link href="/legal" className="text-sm text-muted-foreground hover:text-primary transition-colors">Términos</Link>
+                <Link href="/legal" className="text-sm text-muted-foreground hover:text-primary transition-colors">Privacidad</Link>
+                <Link href="/legal" className="text-sm text-muted-foreground hover:text-primary transition-colors">Cookies</Link>
               </div>
             </div>
           </div>

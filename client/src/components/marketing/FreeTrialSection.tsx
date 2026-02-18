@@ -31,8 +31,6 @@ const FreeTrialSection = () => {
     "Acceso completo a todas las funciones",
     "Sin tarjeta de crédito requerida",
     "Soporte prioritario incluido",
-    "Datos de prueba precargados",
-    "Exportación de datos al finalizar",
     "Capacitación gratuita incluida",
   ];
 

@@ -2,10 +2,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Check, Star, Lock } from "lucide-react";
+import { Check, Star, Lock, Timer } from "lucide-react"; // Añadimos Timer
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-
-// 👇 IMPORTACIONES NUEVAS PARA LA LÓGICA
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -16,9 +14,9 @@ interface Plan {
     name: string;
     description: string;
     prices: {
-        monthly: string;
-        semester: string;
-        annual: string;
+        monthly: number; // Cambiamos a number para manejar lógica
+        semester: number;
+        annual: number;
     };
     features: string[];
     cta: string;
@@ -30,20 +28,26 @@ interface Plan {
 
 const PricingSection = () => {
     const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
-    
-    // 👇 HOOKS PARA DETECTAR USUARIO Y REDIRIGIR
     const { user } = useAuth();
     const [, setLocation] = useLocation();
 
-    const plans: Plan[] = [
+    // 👇 LÓGICA DE LANZAMIENTO
+    const now = new Date();
+    const promoDeadline = new Date("2026-03-18T23:59:59");
+    const isPromoActive = now <= promoDeadline;
+
+    const plans: any[] = [ // Usamos any temporalmente por los strings de "Próximamente"
         {
             id: "standard",
             name: "Estándar",
             description: "Para talleres que necesitan organización total.",
             prices: {
-                monthly: "$30.000",
-                semester: "$160.000",
-                annual: "$300.000",
+                monthly: isPromoActive ? 25000 : 30000, // Precio dinámico
+                semester: 160000,
+                annual: 300000,
+            },
+            oldPrices: { // Para el efecto tachado
+                monthly: 30000
             },
             features: [
                 "Órdenes ilimitadas",
@@ -63,9 +67,9 @@ const PricingSection = () => {
             name: "Multisede",
             description: "La opción ideal para talleres con varias sucursales.",
             prices: {
-                monthly: "$30.000",
-                semester: "$160.000",
-                annual: "$300.000",
+                monthly: 30000,
+                semester: 160000,
+                annual: 300000,
             },
             extraInfo: "+ $10.000 por sucursal extra",
             features: [
@@ -105,6 +109,15 @@ const PricingSection = () => {
         }
     ];
 
+    const formatPrice = (price: any) => {
+        if (typeof price === 'string') return price;
+        return new Intl.NumberFormat('es-AR', {
+            style: 'currency',
+            currency: 'ARS',
+            maximumFractionDigits: 0
+        }).format(price);
+    };
+
     const getPeriodLabel = () => {
         switch (billingPeriod) {
             case 'monthly': return '/mes';
@@ -114,16 +127,10 @@ const PricingSection = () => {
         }
     };
 
-    // 👇 FUNCIÓN INTELIGENTE DE SELECCIÓN
     const handlePlanSelect = (planId: string) => {
         if (user) {
-            // ✅ USUARIO LOGUEADO:
-            // Lo mandamos directo a la configuración en la pestaña de pagos.
-            // (El usuario ya existe, solo quiere pagar/activar)
             setLocation("/configuracion?tab=subscription");
         } else {
-            // ❌ USUARIO NUEVO:
-            // Lo mandamos al registro con la "mochila" de datos (plan y periodo)
             setLocation(`/register?plan=${planId}&period=${billingPeriod}`);
         }
     };
@@ -132,8 +139,8 @@ const PricingSection = () => {
         <section id="pricing" className="py-20 bg-card/50">
             <div className="container mx-auto px-4">
                 <div className="text-center mb-10">
-                    <Badge variant="secondary" className="mb-4 bg-secondary text-foreground border-border">
-                        Precios Simples
+                    <Badge variant="secondary" className="mb-4 bg-secondary text-foreground border-border uppercase tracking-widest">
+                        Lanzamiento 2026
                     </Badge>
                     <h2 className="text-3xl md:text-5xl font-bold text-foreground mb-4">
                         Elige el plan ideal para tu taller
@@ -142,13 +149,21 @@ const PricingSection = () => {
                         Sin costos ocultos. Prueba gratis por 7 días.
                     </p>
 
+                    {/* MOSTRAR AVISO DE OFERTA SI ESTÁ ACTIVA */}
+                    {isPromoActive && (
+                        <div className="flex items-center justify-center gap-2 mb-6 text-emerald-400 font-bold animate-pulse">
+                            <Timer className="w-5 h-5" />
+                            <span>¡Oferta de lanzamiento disponible hasta el 18 de Marzo!</span>
+                        </div>
+                    )}
+
                     <div className="relative inline-flex group mt-4">
                         <div className="absolute -inset-0.5 bg-gradient-to-r from-purple-600/30 via-blue-500/30 to-purple-600/30 rounded-xl blur opacity-20 transition duration-500"></div>
                         <Tabs defaultValue="monthly" className="relative w-full max-w-[500px] mx-auto" onValueChange={(v) => setBillingPeriod(v as BillingPeriod)}>
                             <TabsList className="grid w-full grid-cols-3 bg-neutral-900/90 backdrop-blur-xl border border-white/10 p-1.5 h-auto rounded-xl shadow-lg">
-                                <TabsTrigger value="monthly" className="text-sm md:text-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-600 data-[state=active]:to-blue-600 data-[state=active]:text-white py-3 hover:text-white transition-colors">Mensual</TabsTrigger>
-                                <TabsTrigger value="semester" className="text-sm md:text-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-600 data-[state=active]:to-blue-600 data-[state=active]:text-white py-3 hover:text-white transition-colors">Semestral</TabsTrigger>
-                                <TabsTrigger value="annual" className="text-sm md:text-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-600 data-[state=active]:to-blue-600 data-[state=active]:text-white py-3 hover:text-white transition-colors">Anual</TabsTrigger>
+                                <TabsTrigger value="monthly" className="text-sm md:text-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-600 data-[state=active]:to-blue-600 data-[state=active]:text-white py-3 transition-all">Mensual</TabsTrigger>
+                                <TabsTrigger value="semester" className="text-sm md:text-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-600 data-[state=active]:to-blue-600 data-[state=active]:text-white py-3 transition-all">Semestral</TabsTrigger>
+                                <TabsTrigger value="annual" className="text-sm md:text-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-600 data-[state=active]:to-blue-600 data-[state=active]:text-white py-3 transition-all">Anual</TabsTrigger>
                             </TabsList>
                         </Tabs>
                     </div>
@@ -156,21 +171,16 @@ const PricingSection = () => {
 
                 <div className="flex flex-wrap justify-center gap-8 max-w-7xl mx-auto items-stretch py-10">
                     {plans.map((plan) => {
-                        let cardStyles = "";
-                        if (plan.colorTheme === 'emerald') {
-                            cardStyles = "bg-[radial-gradient(ellipse_at_bottom_right,_var(--tw-gradient-stops))] from-emerald-500/30 via-card/80 to-card border-2 border-emerald-500 shadow-2xl shadow-emerald-500/20";
-                        } else {
-                            cardStyles = "bg-[radial-gradient(ellipse_at_bottom_right,_var(--tw-gradient-stops))] from-purple-500/15 via-card/90 to-card border border-purple-500/50 hover:shadow-purple-500/20";
-                        }
+                        const isStandardPromo = plan.id === 'standard' && billingPeriod === 'monthly' && isPromoActive;
+                        let cardStyles = plan.colorTheme === 'emerald' 
+                            ? "bg-[radial-gradient(ellipse_at_bottom_right,_var(--tw-gradient-stops))] from-emerald-500/30 via-card/80 to-card border-2 border-emerald-500 shadow-2xl shadow-emerald-500/20"
+                            : "bg-[radial-gradient(ellipse_at_bottom_right,_var(--tw-gradient-stops))] from-purple-500/15 via-card/90 to-card border border-purple-500/50 hover:shadow-purple-500/20";
 
                         return (
-                            <Card
-                                key={plan.id}
-                                className={`w-full max-w-sm relative flex flex-col transition-all duration-300 ease-out rounded-xl hover:scale-105 hover:z-10 hover:shadow-[0_0_30px_rgba(168,85,247,0.4)] ${cardStyles}`}
-                            >
+                            <Card key={plan.id} className={`w-full max-w-sm relative flex flex-col transition-all duration-300 ease-out rounded-xl hover:scale-105 hover:z-10 ${cardStyles}`}>
                                 {plan.popular && (
                                     <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20">
-                                        <Badge className="bg-emerald-500 hover:bg-emerald-600 border-0 text-black px-4 py-1 shadow-md shadow-emerald-500/20 font-bold">
+                                        <Badge className="bg-emerald-500 hover:bg-emerald-600 border-0 text-black px-4 py-1 font-bold shadow-lg">
                                             <Star className="w-3 h-3 mr-1 fill-black" />
                                             Más Popular
                                         </Badge>
@@ -178,26 +188,30 @@ const PricingSection = () => {
                                 )}
 
                                 <CardHeader className="text-center pb-4 pt-8">
-                                    <CardTitle className="text-2xl font-bold text-foreground">
-                                        {plan.name}
-                                    </CardTitle>
-                                    <CardDescription className="mt-2 min-h-[40px]">
-                                        {plan.description}
-                                    </CardDescription>
+                                    <CardTitle className="text-2xl font-bold">{plan.name}</CardTitle>
+                                    <CardDescription className="mt-2 min-h-[40px]">{plan.description}</CardDescription>
 
-                                    <div className="mt-6 flex flex-col items-center justify-center min-h-[80px]">
-                                        <div>
+                                    <div className="mt-6 flex flex-col items-center justify-center min-h-[100px]">
+                                        {/* PRECIO TACHADO SI HAY PROMO */}
+                                        {isStandardPromo && (
+                                            <span className="text-lg text-red-500 line-through opacity-80 font-medium">
+                                                {formatPrice(plan.oldPrices.monthly)}
+                                            </span>
+                                        )}
+                                        
+                                        <div className="flex items-baseline justify-center">
                                             <span className={`text-4xl font-extrabold tracking-tight ${plan.isUpcoming ? 'text-muted-foreground' : 'text-foreground'}`}>
-                                                {plan.prices[billingPeriod]}
+                                                {formatPrice(plan.prices[billingPeriod])}
                                             </span>
                                             {!plan.isUpcoming && (
                                                 <span className="text-muted-foreground ml-1 font-medium">{getPeriodLabel()}</span>
                                             )}
                                         </div>
-                                        {plan.extraInfo && (
-                                            <span className="text-purple-400 text-xs font-bold mt-1 uppercase tracking-wider">
-                                                {plan.extraInfo}
-                                            </span>
+
+                                        {isStandardPromo && (
+                                            <Badge variant="outline" className="mt-2 border-emerald-500 text-emerald-500 text-[10px] uppercase">
+                                                Ahorra {formatPrice(plan.oldPrices.monthly - plan.prices.monthly)} este mes
+                                            </Badge>
                                         )}
                                     </div>
                                 </CardHeader>
@@ -205,37 +219,28 @@ const PricingSection = () => {
                                 <CardContent className="flex-1 flex flex-col p-6">
                                     <div className="flex-1">
                                         <ul className="space-y-3 mb-8 mt-2">
-                                            {plan.features.map((feature, i) => (
+                                            {plan.features.map((feature: string, i: number) => (
                                                 <li key={i} className="flex items-start gap-3 text-sm text-muted-foreground">
-                                                    <div className="flex-shrink-0 mt-0.5">
-                                                        <Check className={`w-4 h-4 ${plan.colorTheme === 'emerald' ? 'text-emerald-500' : 'text-purple-500'}`} />
-                                                    </div>
+                                                    <Check className={`w-4 h-4 mt-0.5 flex-shrink-0 ${plan.colorTheme === 'emerald' ? 'text-emerald-500' : 'text-purple-500'}`} />
                                                     {feature}
                                                 </li>
                                             ))}
                                         </ul>
                                     </div>
 
-                                    {/* 👇 LÓGICA DE BOTONES MODIFICADA */}
-                                    {plan.isUpcoming ? (
-                                        <Button
-                                            disabled
-                                            className="w-full text-base py-6 font-bold bg-primary/5 border border-primary/20 text-muted-foreground cursor-not-allowed opacity-70"
-                                        >
-                                            <Lock className="w-4 h-4 mr-2" /> {plan.cta}
-                                        </Button>
-                                    ) : (
-                                        // Usamos onClick en lugar de Link para evaluar la sesión
-                                        <Button
-                                            onClick={() => handlePlanSelect(plan.id)}
-                                            className={`w-full text-base py-6 font-bold transition-all duration-300 ${plan.popular
-                                                ? 'bg-emerald-500 hover:bg-emerald-600 border-0 text-black shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40'
-                                                : 'bg-primary/5 border border-primary/20 text-foreground hover:bg-primary/10 hover:border-primary/40'
-                                                }`}
-                                        >
-                                            {plan.cta}
-                                        </Button>
-                                    )}
+                                    <Button
+                                        disabled={plan.isUpcoming}
+                                        onClick={() => handlePlanSelect(plan.id)}
+                                        className={`w-full text-base py-6 font-bold transition-all duration-300 ${plan.isUpcoming 
+                                            ? 'bg-primary/5 border border-primary/20 text-muted-foreground opacity-70' 
+                                            : plan.popular 
+                                                ? 'bg-emerald-500 hover:bg-emerald-600 border-0 text-black shadow-lg shadow-emerald-500/25' 
+                                                : 'bg-primary/5 border border-primary/20 text-foreground hover:bg-primary/10'
+                                        }`}
+                                    >
+                                        {plan.isUpcoming && <Lock className="w-4 h-4 mr-2" />}
+                                        {plan.cta}
+                                    </Button>
                                 </CardContent>
                             </Card>
                         );

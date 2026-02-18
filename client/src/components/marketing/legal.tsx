@@ -51,7 +51,7 @@ export default function LegalPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Términos y Condiciones de Uso</CardTitle>
-                <CardDescription>Última actualización: Febrero 2024</CardDescription>
+                <CardDescription>Última actualización: Febrero 2026</CardDescription>
               </CardHeader>
               <CardContent className="prose dark:prose-invert max-w-none text-sm text-muted-foreground space-y-4">
                 <p>Bienvenido a <strong>GSM PROYECT</strong>. Al acceder y utilizar nuestro software de gestión para talleres (SaaS), aceptas cumplir con los siguientes términos:</p>

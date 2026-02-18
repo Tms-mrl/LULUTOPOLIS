@@ -40,12 +40,12 @@ import {
     Check,
     Lock,
     Home,
-    Smartphone
+    Smartphone,
+    Timer
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useLocation } from "wouter";
 
-// Definimos los tipos de periodo que usa el FRONTEND (Visualmente)
 type BillingPeriod = 'monthly' | 'semester' | 'annual';
 
 export default function SettingsPage() {
@@ -53,13 +53,11 @@ export default function SettingsPage() {
     const queryClient = useQueryClient();
     const [, setLocation] = useLocation();
 
-    // 1. LÓGICA DE URL MEJORADA
-    // Convertimos lo que venga de la URL (ej: semi_annual) al formato interno (semester)
     const searchParams = new URLSearchParams(window.location.search);
     const initialTab = searchParams.get("tab") || "general";
 
     let urlPeriod = searchParams.get("period");
-    if (urlPeriod === 'semi_annual') urlPeriod = 'semester'; // Corrección automática
+    if (urlPeriod === 'semi_annual') urlPeriod = 'semester';
 
     const initialPeriod = (urlPeriod as BillingPeriod) || "monthly";
 
@@ -68,6 +66,11 @@ export default function SettingsPage() {
     const [subData, setSubData] = useState<any>(null);
     const [loadingCheckout, setLoadingCheckout] = useState(false);
     const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>(initialPeriod);
+
+    // 👇 LÓGICA DE PROMOCIÓN (Igual que en Landing y Backend)
+    const now = new Date();
+    const promoDeadline = new Date("2026-03-18T23:59:59");
+    const isPromoActive = now <= promoDeadline;
 
     const { data: settings, isLoading } = useQuery<Settings>({
         queryKey: ["/api/settings"],
@@ -170,20 +173,16 @@ export default function SettingsPage() {
         }
     };
 
-    // 2. CHECKOUT CORREGIDO
     const handleCheckout = async (planType: string) => {
         let backendPlanId = "";
 
         if (planType === "standard") {
-            // Mapeamos el estado visual (semester) al ID real del backend (semi_annual)
             if (billingPeriod === "monthly") backendPlanId = "monthly";
             if (billingPeriod === "semester") backendPlanId = "semi_annual";
             if (billingPeriod === "annual") backendPlanId = "annual";
         } else {
             return;
         }
-
-        console.log("Iniciando checkout con plan:", backendPlanId); // Debug
 
         try {
             setLoadingCheckout(true);
@@ -219,10 +218,15 @@ export default function SettingsPage() {
         return new Date(dateString).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' });
     };
 
-    // --- HELPER PARA PRECIOS Y AHORROS ---
+    // --- HELPER PARA PRECIOS Y AHORROS CON PROMOCIÓN ---
     const getPricingDisplay = (type: 'standard' | 'multi' | 'ai') => {
         if (type === 'standard') {
-            if (billingPeriod === 'monthly') return { price: "$30.000", original: null };
+            if (billingPeriod === 'monthly') {
+                // Si la promo está activa, devolvemos el precio con descuento y el original tachado
+                return isPromoActive 
+                    ? { price: "$25.000", original: "$30.000" } 
+                    : { price: "$30.000", original: null };
+            }
             if (billingPeriod === 'semester') return { price: "$160.000", original: "$180.000" };
             if (billingPeriod === 'annual') return { price: "$300.000", original: "$360.000" };
         }
@@ -511,7 +515,15 @@ export default function SettingsPage() {
                                 </div>
 
                                 {/* 2. SELECTOR DE PERIODO */}
-                                <div className="flex justify-center">
+                                <div className="flex flex-col items-center gap-4">
+                                    {/* AVISO DE OFERTA */}
+                                    {isPromoActive && (
+                                        <div className="flex items-center gap-2 text-emerald-400 font-bold animate-pulse">
+                                            <Timer className="w-5 h-5" />
+                                            <span>¡Oferta lanzamiento hasta el 18 de Marzo!</span>
+                                        </div>
+                                    )}
+
                                     <div className="relative inline-flex group">
                                         <div className="absolute -inset-0.5 bg-gradient-to-r from-purple-600/30 via-blue-500/30 to-purple-600/30 rounded-xl blur opacity-20 transition duration-500"></div>
                                         <Tabs defaultValue={billingPeriod} className="relative w-full max-w-[500px] mx-auto" onValueChange={(v) => setBillingPeriod(v as BillingPeriod)}>
@@ -593,7 +605,7 @@ export default function SettingsPage() {
                                                     <div className="flex flex-col">
                                                         {/* PRECIO ORIGINAL TACHADO (AHORRO) */}
                                                         {plan.originalPrice && !plan.comingSoon && (
-                                                            <span className="text-xs text-muted-foreground line-through font-medium ml-1">
+                                                            <span className="text-xs text-muted-foreground line-through font-medium ml-1 text-red-400">
                                                                 {plan.originalPrice}
                                                             </span>
                                                         )}

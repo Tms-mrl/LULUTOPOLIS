@@ -15,7 +15,6 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
-  // 👇 NUEVO: Método genérico para actualizar usuario (necesario para suscripciones)
   updateUser(id: string, user: Partial<User>): Promise<User | undefined>;
 
   getClients(userId: string): Promise<Client[]>;
@@ -30,7 +29,11 @@ export interface IStorage {
   updateDevice(id: string, data: Partial<InsertDevice>, userId: string): Promise<Device | undefined>;
 
   getOrdersWithDetails(userId: string): Promise<RepairOrderWithDetails[]>;
+  // 👇 Esta ya la tenías, es la buena para detalles
   getOrderWithDetails(id: string): Promise<RepairOrderWithDetails | undefined>;
+  // 👇 AGREGADA: Esta faltaba y causaba el error en routes
+  getOrder(id: string): Promise<RepairOrder | undefined>;
+  
   createOrder(order: InsertRepairOrder & { userId: string }): Promise<RepairOrder>;
   updateOrder(id: string, data: Partial<InsertRepairOrder>): Promise<RepairOrder | undefined>;
   deleteOrder(id: string, userId: string): Promise<void>;
@@ -197,7 +200,6 @@ export class SupabaseStorage implements IStorage {
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    // Nota: Como quitamos 'username' del schema, buscaremos por email o lo dejamos como stub
     const { data } = await supabase.from("users").select("*").eq("email", username).single();
     return data ? this.mapUser(data) : undefined;
   }
@@ -215,7 +217,6 @@ export class SupabaseStorage implements IStorage {
     return this.mapUser(data);
   }
 
-  // 👇 MÉTODO AGREGADO: Vital para renovar suscripciones desde routes.ts
   async updateUser(id: string, user: Partial<User>): Promise<User | undefined> {
     const payload: any = {};
     if (user.subscriptionStatus) payload.subscription_status = user.subscriptionStatus;
@@ -346,6 +347,7 @@ export class SupabaseStorage implements IStorage {
     return Promise.all(data.map(row => this.enrichOrder(this.mapOrder(row))));
   }
 
+  // ✅ ESTA ES LA MEJOR PARA DETALLES (Ya existía)
   async getOrderWithDetails(id: string): Promise<RepairOrderWithDetails | undefined> {
     const { data } = await supabase
       .from("repair_orders")
@@ -355,6 +357,17 @@ export class SupabaseStorage implements IStorage {
 
     if (!data) return undefined;
     return this.enrichOrder(this.mapOrder(data));
+  }
+
+  // ✅ AGREGADA: Para evitar el error en routes.ts si llama a .getOrder()
+  async getOrder(id: string): Promise<RepairOrder | undefined> {
+    const { data } = await supabase
+      .from("repair_orders")
+      .select("*")
+      .eq("id", id)
+      .single();
+    
+    return data ? this.mapOrder(data) : undefined;
   }
 
   async createOrder(order: InsertRepairOrder & { userId: string }): Promise<RepairOrder> {

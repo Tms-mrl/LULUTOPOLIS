@@ -13,7 +13,7 @@ import {
 } from "@shared/schema";
 import { createClient } from "@supabase/supabase-js";
 import multer from "multer";
-import { Resend } from 'resend'; // ✅ Cambio: Usamos Resend en lugar de Nodemailer
+import { Resend } from 'resend';
 import { MercadoPagoConfig, Preference, Payment } from 'mercadopago';
 
 const upload = multer({
@@ -24,9 +24,6 @@ const upload = multer({
 const supabaseUrl = process.env.SUPABASE_URL || "";
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const supabase = createClient(supabaseUrl, supabaseKey);
-
-// Inicializamos Resend
-const resend = new Resend(process.env.RESEND_API_KEY);
 
 // --- HELPER: CALCULAR FECHA DE CAJA (ARGENTINA + CUTOFF) ---
 const getShiftDate = (settings: any): string => {
@@ -42,6 +39,10 @@ const getShiftDate = (settings: any): string => {
 };
 
 export async function registerRoutes(server: Server, app: Express) {
+  
+  // Inicializamos Resend aquí para evitar errores de inicio
+  const resend = new Resend(process.env.RESEND_API_KEY);
+
   const getUserId = async (req: Request): Promise<string> => {
     const GUEST_ID = "guest-user-no-access";
     try {
@@ -127,7 +128,13 @@ export async function registerRoutes(server: Server, app: Express) {
 
       const { planId } = req.body;
       let title = "Suscripción Mensual - GSM FIX";
-      let price = 30000;
+      
+      // 👇 LÓGICA DE PROMOCIÓN ($25.000 hasta el 18 de Marzo)
+      const now = new Date();
+      const promoDeadline = new Date("2026-03-18T23:59:59");
+      const isPromoActive = now <= promoDeadline;
+
+      let price = isPromoActive ? 25000 : 30000;
 
       if (planId === 'semi_annual') {
         title = "Suscripción Semestral - GSM FIX";
@@ -246,7 +253,7 @@ export async function registerRoutes(server: Server, app: Express) {
     } catch (e) { res.status(500).json({ error: "Simulation failed" }); }
   });
 
-  // --- RUTAS ESTÁNDAR ---
+  // --- RUTAS DE CLIENTES ---
   app.get("/api/clients", async (req, res) => { try { const u = await getUserId(req); res.json(await storage.getClients(u)); } catch (e) { res.status(500).json({ error: "Error" }); } });
   app.post("/api/clients", async (req, res) => {
     try {
@@ -260,13 +267,36 @@ export async function registerRoutes(server: Server, app: Express) {
   app.patch("/api/clients/:id", async (req, res) => { try { const u = await storage.updateClient(req.params.id, req.body); res.json(u); } catch (e) { res.status(500).json({ error: "Error" }); } });
   app.delete("/api/clients/:id", async (req, res) => { try { const u = await getUserId(req); await storage.deleteClient(req.params.id, u); res.sendStatus(204); } catch (e) { res.status(500).json({ error: "Error" }); } });
 
+  // --- RUTAS DE DISPOSITIVOS ---
   app.get("/api/devices", async (req, res) => { try { const u = await getUserId(req); res.json(await storage.getDevices(u)); } catch (e) { res.status(500).json({ error: "Error" }); } });
   app.post("/api/devices", async (req, res) => { try { const p = insertDeviceSchema.safeParse(req.body); const u = await getUserId(req); res.status(201).json(await storage.createDevice({ ...p.data, userId: u, user_id: u } as any)); } catch (e) { res.status(500).json({ error: "Error" }); } });
 
+  // --- RUTAS DE ÓRDENES ---
   app.get("/api/orders", async (req, res) => { try { const u = await getUserId(req); res.json(await storage.getOrdersWithDetails(u)); } catch (e) { res.status(500).json({ error: "Error" }); } });
+  
+  // ✅ RUTA CORREGIDA: Obtiene el detalle usando getOrderWithDetails y ID como string
+  app.get("/api/orders/:id", async (req, res) => {
+    try {
+      const u = await getUserId(req);
+      const { id } = req.params; // ID es UUID string, no usar parseInt
+
+      // Usamos getOrderWithDetails que SÍ existe en tu storage.ts
+      const order = await storage.getOrderWithDetails(id);
+      
+      if (!order || (order.userId !== u && u !== "guest-user-no-access")) {
+        return res.status(404).json({ error: "Orden no encontrada" });
+      }
+      res.json(order);
+    } catch (e) {
+      console.error("Error al obtener orden:", e);
+      res.status(500).json({ error: "Error interno del servidor" });
+    }
+  });
+
   app.post("/api/orders", async (req, res) => { try { const p = insertRepairOrderSchema.safeParse(req.body); const u = await getUserId(req); res.status(201).json(await storage.createOrder({ ...p.data, userId: u, user_id: u } as any)); } catch (e) { res.status(500).json({ error: "Error" }); } });
   app.patch("/api/orders/:id", async (req, res) => { try { res.json(await storage.updateOrder(req.params.id, req.body)); } catch (e) { res.status(500).json({ error: "Error" }); } });
 
+  // --- RUTAS DE PAGOS ---
   app.get("/api/payments", async (req, res) => { try { const u = await getUserId(req); res.json(await storage.getPaymentsWithOrders(u)); } catch (e) { res.status(500).json({ error: "Error" }); } });
   app.post("/api/payments", async (req, res) => {
     try {
@@ -277,9 +307,11 @@ export async function registerRoutes(server: Server, app: Express) {
     } catch (e) { res.status(500).json({ error: "Error" }); }
   });
 
+  // --- RUTAS DE GASTOS ---
   app.get("/api/expenses", async (req, res) => { try { const u = await getUserId(req); res.json(await storage.getExpenses(u)); } catch (e) { res.status(500).json({ error: "Error" }); } });
   app.post("/api/expenses", async (req, res) => { try { const p = insertExpenseSchema.safeParse(req.body); const u = await getUserId(req); res.status(201).json(await storage.createExpense({ ...p.data, userId: u, user_id: u } as any)); } catch (e) { res.status(500).json({ error: "Error" }); } });
 
+  // --- RUTAS DE CAJA ---
   app.get("/api/cash/today", async (req, res) => {
     try {
       const u = await getUserId(req);
@@ -299,6 +331,7 @@ export async function registerRoutes(server: Server, app: Express) {
     } catch (e) { res.status(500).json({ error: "Error" }); }
   });
 
+  // --- OTRAS RUTAS ---
   app.get("/api/stats", async (req, res) => { try { const u = await getUserId(req); res.json(await storage.getStats(u)); } catch (e) { res.status(500).json({ error: "Error" }); } });
 
   app.get("/api/settings", async (req, res) => { try { const u = await getUserId(req); res.json((await storage.getSettings(u)) || {}); } catch (e) { res.status(500).json({ error: "Error" }); } });

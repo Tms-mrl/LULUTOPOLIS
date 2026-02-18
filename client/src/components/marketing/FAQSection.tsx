@@ -17,7 +17,7 @@ const FAQSection = () => {
         },
         {
             question: "¿Qué pasa si tengo más de una sucursal?",
-            answer: "El plan Prime está diseñado para un taller. Si tienes múltiples sucursales, te recomendamos el plan Enterprise que ofrece gestión centralizada y precios especiales por volumen."
+            answer: "El plan Multisede está diseñado para un taller. Si tienes múltiples sucursales, te recomendamos el plan Enterprise que ofrece gestión centralizada y precios especiales por volumen."
         },
         {
             question: "¿Mis datos están seguros?",
@@ -25,7 +25,7 @@ const FAQSection = () => {
         },
         {
             question: "¿Ofrecen soporte técnico?",
-            answer: "Sí, todos los planes incluyen soporte. El plan Prime cuenta con soporte prioritario por email y chat para asegurar que tu taller nunca se detenga."
+            answer: "Sí, todos los planes incluyen soporte. El plan Multisede cuenta con soporte prioritario por email y chat para asegurar que tu taller nunca se detenga."
         }
     ];
 

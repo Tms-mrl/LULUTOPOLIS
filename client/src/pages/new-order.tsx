@@ -43,10 +43,13 @@ export default function NewOrder() {
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
 
   const { data: clients } = useQuery<Client[]>({ queryKey: ["/api/clients"] });
+  
+  // Mantenemos el fetch reactivo al cliente seleccionado
   const { data: devices } = useQuery<Device[]>({
     queryKey: ["/api/devices", selectedClientId],
     enabled: !!selectedClientId,
   });
+  
   const { data: settings } = useQuery<Settings>({ queryKey: ["/api/settings"] });
 
   const form = useForm<OrderFormValues>({
@@ -87,7 +90,7 @@ export default function NewOrder() {
     },
     onSuccess: (newClient: Client) => {
       queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
-      form.setValue("clientId", newClient.id);
+      form.setValue("clientId", newClient.id, { shouldValidate: true });
       setSelectedClientId(newClient.id);
       form.setValue("deviceId", "");
       setSelectedDeviceId("");
@@ -98,19 +101,27 @@ export default function NewOrder() {
     onError: () => { toast({ title: "Error al crear cliente", variant: "destructive" }); }
   });
 
+  // 👇 AQUI ESTABA EL ERROR: Modificamos la invalidación y forzamos la actualización del select
   const createDevice = useMutation({
     mutationFn: async (data: z.infer<typeof newDeviceSchema>) => {
       const res = await apiRequest("POST", "/api/devices", { ...data, clientId: selectedClientId });
       return res.json();
     },
     onSuccess: (newDevice: Device) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/devices", selectedClientId] });
-      form.setValue("deviceId", newDevice.id);
+      // 1. Limpiamos TODA la caché de dispositivos para forzar la recarga
+      queryClient.invalidateQueries({ queryKey: ["/api/devices"] });
+      
+      // 2. Le decimos al formulario que actualice el UI sí o sí (shouldValidate & shouldDirty)
+      form.setValue("deviceId", newDevice.id, { shouldValidate: true, shouldDirty: true });
       setSelectedDeviceId(newDevice.id);
+      
       setShowNewDevice(false);
       deviceForm.reset({ brand: "", model: "", imei: "", serialNumber: "", color: "", condition: "Bueno", lockType: "" as any, lockValue: "" });
-      toast({ title: "Dispositivo agregado" });
+      toast({ title: "Dispositivo agregado y seleccionado" });
     },
+    onError: () => {
+      toast({ title: "Error al guardar dispositivo", variant: "destructive" });
+    }
   });
 
   // UNIFICAMOS LA CREACIÓN DE ORDEN
@@ -118,7 +129,7 @@ export default function NewOrder() {
     mutationFn: async ({ data, status }: { data: z.infer<typeof orderFormSchema>, status: string }) => {
       const res = await apiRequest("POST", "/api/orders", {
         ...data,
-        status: status, // Aquí pasamos 'recibido' o 'presupuesto'
+        status: status,
         diagnosis: "",
         solution: "",
         finalCost: 0,
@@ -133,7 +144,6 @@ export default function NewOrder() {
       toast({ title: isBudget ? "Presupuesto guardado" : "Orden creada exitosamente" });
 
       if (isBudget) {
-        // Si es presupuesto, vamos directo a imprimir en pestaña nueva y luego al detalle
         window.open(`/ordenes/${newOrder.id}/print`, "_blank");
         navigate(`/ordenes/${newOrder.id}`);
       } else {
@@ -145,7 +155,6 @@ export default function NewOrder() {
     },
   });
 
-  // Manejador genérico para los botones
   const handleSave = (status: "recibido" | "presupuesto") => {
     form.handleSubmit((data) => {
       createOrder.mutate({ data: data as unknown as z.infer<typeof orderFormSchema>, status });
@@ -305,7 +314,7 @@ export default function NewOrder() {
               type="button"
               variant="secondary"
               className="bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 border-amber-500/20 border"
-              onClick={() => handleSave("presupuesto")} // <-- Guarda como presupuesto
+              onClick={() => handleSave("presupuesto")}
               disabled={createOrder.isPending}
             >
               <Printer className="mr-2 h-4 w-4" />
@@ -315,7 +324,7 @@ export default function NewOrder() {
             {/* BOTÓN CREAR ORDEN */}
             <Button
               type="button"
-              onClick={() => handleSave("recibido")} // <-- Guarda como recibido
+              onClick={() => handleSave("recibido")}
               disabled={createOrder.isPending}
             >
               {createOrder.isPending ? "Creando..." : "Crear Orden"}
@@ -329,7 +338,6 @@ export default function NewOrder() {
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader><DialogTitle>Nuevo Cliente</DialogTitle></DialogHeader>
           <div className="grid gap-4 py-4">
-            {/* ... (Formulario Cliente igual al anterior) ... */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Nombre Completo *</label>

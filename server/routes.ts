@@ -248,6 +248,9 @@ export async function registerRoutes(server: Server, app: Express) {
   // --- RUTAS DE CLIENTES ---
   app.get("/api/clients", async (req, res) => { try { const u = await getUserId(req); res.json(await storage.getClients(u)); } catch (e) { res.status(500).json({ error: "Error" }); } });
   
+  // 👇 AQUÍ ESTÁ LA RUTA REVIVIDA PARA VER UN CLIENTE ESPECÍFICO 👇
+  app.get("/api/clients/:id", async (req, res) => { try { const c = await storage.getClient(req.params.id); if (!c) return res.status(404).json({ error: "Not found" }); res.json(c); } catch (e) { res.status(500).json({ error: "Error" }); } });
+
   // ✅ Restauramos la validación (safeParse) que funcionaba
   app.post("/api/clients", async (req, res) => {
     try {

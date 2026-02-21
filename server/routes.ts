@@ -283,6 +283,18 @@ export async function registerRoutes(server: Server, app: Express) {
     } catch (e) { res.status(500).json({ error: "Error" }); } 
   });
 
+  app.patch("/api/devices/:id", async (req, res) => {
+    try {
+      const u = await getUserId(req);
+      const updated = await storage.updateDevice(req.params.id, req.body, u);
+      if (!updated) return res.status(404).json({ error: "Not found" });
+      res.json(updated);
+    } catch (e) {
+      console.error("Route error updating device:", e);
+      res.status(500).json({ error: "Error updating device" });
+    }
+  });
+  
   // --- RUTAS DE ÓRDENES ---
   app.get("/api/orders", async (req, res) => { try { const u = await getUserId(req); res.json(await storage.getOrdersWithDetails(u)); } catch (e) { res.status(500).json({ error: "Error" }); } });
   

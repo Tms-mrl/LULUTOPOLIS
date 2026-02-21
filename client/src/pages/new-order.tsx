@@ -39,7 +39,10 @@ export default function NewOrder() {
   const [showNewDevice, setShowNewDevice] = useState(false);
   const [showNewClient, setShowNewClient] = useState(false);
   const [openClientCombobox, setOpenClientCombobox] = useState(false);
-  const [selectedClientId, setSelectedClientId] = useState("");
+  const searchParams = new URLSearchParams(window.location.search);
+  const urlClientId = searchParams.get("clientId") || "";
+
+  const [selectedClientId, setSelectedClientId] = useState(urlClientId);
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
 
   const { data: clients } = useQuery<Client[]>({ queryKey: ["/api/clients"] });
@@ -55,7 +58,7 @@ export default function NewOrder() {
   const form = useForm<OrderFormValues>({
     resolver: zodResolver(orderFormSchema),
     defaultValues: {
-      clientId: "",
+      clientId: urlClientId, 
       deviceId: "",
       problem: "",
       estimatedCost: "0",

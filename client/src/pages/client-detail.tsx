@@ -53,10 +53,12 @@ export default function ClientDetail() {
     enabled: !!clientId,
   });
 
-  const { data: orders, isLoading: ordersLoading } = useQuery<RepairOrderWithDetails[]>({
-    queryKey: ["/api/clients", clientId, "orders"],
-    enabled: !!clientId,
+  // 👇 FIX 1: Pedimos todas las órdenes y las filtramos para no depender de una ruta inexistente
+  const { data: allOrders, isLoading: ordersLoading } = useQuery<RepairOrderWithDetails[]>({
+    queryKey: ["/api/orders"],
   });
+  
+  const orders = allOrders?.filter(order => order.clientId === clientId);
 
   // --- LÓGICA DELETE ---
   const deleteClient = useMutation({
@@ -294,8 +296,9 @@ export default function ClientDetail() {
                 <ClipboardList className="h-4 w-4" />
                 Historial de Órdenes ({orders?.length ?? 0})
               </CardTitle>
+              {/* 👇 FIX 2: Le pasamos el ID del cliente en la URL */}
               <Button size="sm" asChild data-testid="button-new-order-from-client">
-                <Link href="/ordenes/nueva">Nueva Orden</Link>
+                <Link href={`/ordenes/nueva?clientId=${clientId}`}>Nueva Orden</Link>
               </Button>
             </CardHeader>
             <CardContent>
@@ -336,7 +339,7 @@ export default function ClientDetail() {
                   title="Sin órdenes"
                   description="Este cliente no tiene órdenes de reparación"
                   actionLabel="Nueva Orden"
-                  actionHref="/ordenes/nueva"
+                  actionHref={`/ordenes/nueva?clientId=${clientId}`} // 👇 Y acá también
                 />
               )}
             </CardContent>

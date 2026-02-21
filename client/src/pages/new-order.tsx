@@ -201,7 +201,10 @@ export default function NewOrder() {
                                 variant="outline"
                                 role="combobox"
                                 aria-expanded={openClientCombobox}
-                                className={cn("w-full justify-between", !field.value && "text-muted-foreground")}
+                                className={cn(
+                                  "w-full justify-between font-normal",
+                                  !field.value ? "text-muted-foreground" : "text-foreground border-input hover:text-foreground"
+                                )}
                               >
                                 {field.value ? clients?.find((client) => client.id === field.value)?.name : "Buscar cliente..."}
                                 <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />

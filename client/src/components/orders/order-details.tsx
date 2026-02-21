@@ -96,11 +96,10 @@ export function OrderDetails({ form }: OrderDetailsProps) {
                                             <Button
                                                 variant="outline"
                                                 className={cn(
-                                                    // Clases base para igualar exactamente al Input
                                                     "h-10 w-full px-3 text-left font-normal",
                                                     "border-input bg-background hover:bg-accent hover:text-accent-foreground",
-                                                    "flex items-center justify-between", // Alineación flex
-                                                    !field.value && "text-muted-foreground"
+                                                    "flex items-center justify-between",
+                                                    !field.value ? "text-muted-foreground" : "text-foreground"
                                                 )}
                                             >
                                                 {field.value ? (
@@ -108,7 +107,7 @@ export function OrderDetails({ form }: OrderDetailsProps) {
                                                 ) : (
                                                     <span>dd/mm/aa</span>
                                                 )}
-                                                <CalendarIcon className="h-4 w-4 opacity-50 text-primary" />
+                                                <CalendarIcon className="h-4 w-4 opacity-50" />
                                             </Button>
                                         </FormControl>
                                     </PopoverTrigger>

@@ -6,7 +6,8 @@ import {
   CheckCircle2,
   PackageCheck,
   FileText, // Icono para Presupuesto
-  Inbox
+  Inbox,
+  XCircle // <--- Nuevo ícono para Irreparable
 } from "lucide-react";
 import type { OrderStatus } from "@shared/schema";
 
@@ -34,6 +35,9 @@ export function StatusBadge({ status, className, showIcon = true }: StatusBadgeP
 
     // ENTREGADO (Gris/Zinc - Antes era Azul)
     entregado: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20 hover:bg-zinc-500/20",
+
+    // IRREPARABLE (Rojo/Red)
+    irreparable: "bg-red-500/10 text-red-500 border-red-500/20 hover:bg-red-500/20",
   };
 
   const labels: Record<string, string> = {
@@ -42,6 +46,7 @@ export function StatusBadge({ status, className, showIcon = true }: StatusBadgeP
     en_curso: "En Curso",
     listo: "Listo",
     entregado: "Entregado",
+    irreparable: "Irreparable",
   };
 
   const icons: Record<string, any> = {
@@ -50,6 +55,7 @@ export function StatusBadge({ status, className, showIcon = true }: StatusBadgeP
     en_curso: Loader2,
     listo: CheckCircle2,
     entregado: PackageCheck,
+    irreparable: XCircle,
   };
 
   const currentStatus = status as OrderStatus;

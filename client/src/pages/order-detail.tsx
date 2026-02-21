@@ -55,6 +55,7 @@ const statusOptions: { value: OrderStatus; label: string }[] = [
   { value: "en_curso", label: "En Curso" },
   { value: "listo", label: "Listo para Entregar" },
   { value: "entregado", label: "Entregado" },
+  { value: "irreparable", label: "Irreparable" }, 
 ];
 
 export default function OrderDetail() {

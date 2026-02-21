@@ -129,7 +129,6 @@ export async function registerRoutes(server: Server, app: Express) {
       const { planId } = req.body;
       let title = "Suscripción Mensual - GSM FIX";
       
-      // 👇 LÓGICA DE PROMOCIÓN ($25.000 hasta el 18 de Marzo)
       const now = new Date();
       const promoDeadline = new Date("2026-03-18T23:59:59");
       const isPromoActive = now <= promoDeadline;
@@ -163,9 +162,7 @@ export async function registerRoutes(server: Server, app: Express) {
             },
           ],
           external_reference: user.id,
-          metadata: {
-            plan_id: planId
-          },
+          metadata: { plan_id: planId },
           back_urls: {
             success: `${baseUrl}/payment-success?planId=${planId}`,
             failure: `${baseUrl}/plan-expired`,
@@ -177,17 +174,14 @@ export async function registerRoutes(server: Server, app: Express) {
       });
 
       res.json({ init_point: result.init_point });
-    } catch (e: any) {
-      res.status(500).json({ error: "Error creando pago" });
-    }
+    } catch (e: any) { res.status(500).json({ error: "Error creando pago" }); }
   });
 
   // =========================================================
   // 2. WEBHOOK REAL MERCADO PAGO
   // =========================================================
   app.post("/api/webhooks/mercadopago", async (req, res) => {
-    const { type, data } = req.body;
-    const action = req.body.action;
+    const { type, data, action } = req.body;
     res.status(200).send("OK");
 
     if (type === "payment" || action === "payment.created") {
@@ -223,9 +217,7 @@ export async function registerRoutes(server: Server, app: Express) {
             }
           }
         }
-      } catch (error) {
-        console.error("Error procesando webhook:", error);
-      }
+      } catch (error) { console.error("Error webhook:", error); }
     }
   });
 
@@ -256,16 +248,15 @@ export async function registerRoutes(server: Server, app: Express) {
   // --- RUTAS DE CLIENTES ---
   app.get("/api/clients", async (req, res) => { try { const u = await getUserId(req); res.json(await storage.getClients(u)); } catch (e) { res.status(500).json({ error: "Error" }); } });
   
-  // ✅ FIX: Eliminamos safeParse, enviamos data directa
+  // ✅ Restauramos la validación (safeParse) que funcionaba
   app.post("/api/clients", async (req, res) => {
     try {
-      const u = await getUserId(req);
-      const newClient = await storage.createClient({ ...req.body, userId: u, user_id: u } as any);
+      const parseResult = insertClientSchema.safeParse(req.body);
+      if (!parseResult.success) return res.status(400).json({ error: parseResult.error.errors });
+      const userId = await getUserId(req);
+      const newClient = await storage.createClient({ ...parseResult.data, userId: userId, user_id: userId } as any);
       res.status(201).json(newClient);
-    } catch (e: any) { 
-      console.error("Error creating client:", e);
-      res.status(500).json({ error: e.message || "Error al crear cliente" }); 
-    }
+    } catch (e) { res.status(500).json({ error: "Internal Server Error" }); }
   });
   app.patch("/api/clients/:id", async (req, res) => { try { const u = await storage.updateClient(req.params.id, req.body); res.json(u); } catch (e) { res.status(500).json({ error: "Error" }); } });
   app.delete("/api/clients/:id", async (req, res) => { try { const u = await getUserId(req); await storage.deleteClient(req.params.id, u); res.sendStatus(204); } catch (e) { res.status(500).json({ error: "Error" }); } });
@@ -273,16 +264,20 @@ export async function registerRoutes(server: Server, app: Express) {
   // --- RUTAS DE DISPOSITIVOS ---
   app.get("/api/devices", async (req, res) => { try { const u = await getUserId(req); res.json(await storage.getDevices(u)); } catch (e) { res.status(500).json({ error: "Error" }); } });
   
-  // ✅ FIX: Eliminamos safeParse para que UUID (clientId) no sea bloqueado
+  // ✅ Mantenemos la ruta QUE ARREGLA LA VISTA en el casillero
   app.get("/api/devices/:clientId", async (req, res) => { 
+    try { res.json(await storage.getDevicesByClient(req.params.clientId)); } 
+    catch (e) { res.status(500).json({ error: "Error" }); } 
+  });
+  
+  // ✅ Restauramos la validación que guarda perfecto en DB
+  app.post("/api/devices", async (req, res) => { 
     try { 
-      // Busca los dispositivos usando la función del storage
-      const devices = await storage.getDevicesByClient(req.params.clientId);
-      res.json(devices); 
-    } catch (e) { 
-      console.error("Error fetching devices by client:", e);
-      res.status(500).json({ error: "Error interno al obtener dispositivos" }); 
-    } 
+      const p = insertDeviceSchema.safeParse(req.body); 
+      if (!p.success) return res.status(400).json({ error: p.error.errors }); 
+      const u = await getUserId(req); 
+      res.status(201).json(await storage.createDevice({ ...p.data, userId: u, user_id: u } as any)); 
+    } catch (e) { res.status(500).json({ error: "Error" }); } 
   });
 
   // --- RUTAS DE ÓRDENES ---
@@ -292,60 +287,49 @@ export async function registerRoutes(server: Server, app: Express) {
     try {
       const u = await getUserId(req);
       const { id } = req.params; 
-
       const order = await storage.getOrderWithDetails(id);
-      
       if (!order || (order.userId !== u && u !== "guest-user-no-access")) {
         return res.status(404).json({ error: "Orden no encontrada" });
       }
       res.json(order);
-    } catch (e) {
-      console.error("Error al obtener orden:", e);
-      res.status(500).json({ error: "Error interno del servidor" });
-    }
+    } catch (e) { res.status(500).json({ error: "Error" }); }
   });
 
-  // ✅ FIX: Eliminamos safeParse para que se guarden los UUIDs sin problema
+  // ✅ Restauramos la validación que guarda perfecto
   app.post("/api/orders", async (req, res) => { 
     try { 
+      const p = insertRepairOrderSchema.safeParse(req.body); 
+      if (!p.success) return res.status(400).json({ error: p.error.errors }); 
       const u = await getUserId(req); 
-      const newOrder = await storage.createOrder({ ...req.body, userId: u, user_id: u } as any);
-      res.status(201).json(newOrder); 
-    } catch (e: any) { 
-      console.error("Error creating order:", e);
-      res.status(500).json({ error: e.message || "Error al crear orden" }); 
-    } 
+      res.status(201).json(await storage.createOrder({ ...p.data, userId: u, user_id: u } as any)); 
+    } catch (e) { res.status(500).json({ error: "Error" }); } 
   });
   app.patch("/api/orders/:id", async (req, res) => { try { res.json(await storage.updateOrder(req.params.id, req.body)); } catch (e) { res.status(500).json({ error: "Error" }); } });
 
   // --- RUTAS DE PAGOS ---
   app.get("/api/payments", async (req, res) => { try { const u = await getUserId(req); res.json(await storage.getPaymentsWithOrders(u)); } catch (e) { res.status(500).json({ error: "Error" }); } });
   
-  // ✅ FIX: Eliminamos safeParse 
+  // ✅ Restauramos la validación original de pagos
   app.post("/api/payments", async (req, res) => {
     try {
+      const p = insertPaymentSchema.safeParse(req.body);
+      if (!p.success) return res.status(400).json({ error: p.error.errors });
       const u = await getUserId(req);
-      const newPayment = await storage.createPayment({ ...req.body, userId: u } as any);
-      res.status(201).json(newPayment);
-    } catch (e: any) { 
-      console.error("Error creating payment:", e);
-      res.status(500).json({ error: e.message || "Error al crear pago" }); 
-    }
+      const paymentData = { amount: p.data.amount, method: p.data.method, notes: p.data.notes, orderId: p.data.orderId || undefined, items: p.data.items || [], userId: u };
+      res.status(201).json(await storage.createPayment(paymentData as any));
+    } catch (e) { res.status(500).json({ error: "Error interno" }); }
   });
 
   // --- RUTAS DE GASTOS ---
   app.get("/api/expenses", async (req, res) => { try { const u = await getUserId(req); res.json(await storage.getExpenses(u)); } catch (e) { res.status(500).json({ error: "Error" }); } });
   
-  // ✅ FIX: Eliminamos safeParse
   app.post("/api/expenses", async (req, res) => { 
     try { 
+      const p = insertExpenseSchema.safeParse(req.body); 
+      if (!p.success) return res.status(400).json({ error: p.error.errors }); 
       const u = await getUserId(req); 
-      const newExpense = await storage.createExpense({ ...req.body, userId: u, user_id: u } as any);
-      res.status(201).json(newExpense); 
-    } catch (e: any) { 
-      console.error("Error creating expense:", e);
-      res.status(500).json({ error: e.message || "Error al crear gasto" }); 
-    } 
+      res.status(201).json(await storage.createExpense({ ...p.data, userId: u, user_id: u } as any)); 
+    } catch (e) { res.status(500).json({ error: "Error" }); } 
   });
 
   // --- RUTAS DE CAJA ---
@@ -362,10 +346,12 @@ export async function registerRoutes(server: Server, app: Express) {
   app.post("/api/cash", async (req, res) => {
     try {
       const u = await getUserId(req);
+      const parseResult = insertDailyCashSchema.pick({ amount: true }).safeParse(req.body);
+      if (!parseResult.success) return res.status(400).json({ error: parseResult.error.errors });
       const settings = await storage.getSettings(u);
       const dateStr = getShiftDate(settings);
-      res.json(await storage.upsertDailyCash(u, { date: dateStr, amount: req.body.amount }));
-    } catch (e) { res.status(500).json({ error: "Error" }); }
+      res.json(await storage.upsertDailyCash(u, { date: dateStr, amount: parseResult.data.amount }));
+    } catch (e) { res.status(500).json({ error: "Error guardando caja" }); }
   });
 
   // --- OTRAS RUTAS ---
@@ -402,44 +388,21 @@ export async function registerRoutes(server: Server, app: Express) {
 
       if (u !== "guest-user-no-access") {
         const userRecord = await storage.getUser(u);
-        if (userRecord) {
-          userInfo = `Usuario ID: ${u}`;
-          userEmail = userRecord.email || "No disponible";
-        }
+        if (userRecord) { userInfo = `Usuario ID: ${u}`; userEmail = userRecord.email || "No disponible"; }
       }
 
-      if (!process.env.RESEND_API_KEY) {
-        return res.status(500).json({ error: "Falta RESEND_API_KEY en el servidor" });
-      }
+      if (!process.env.RESEND_API_KEY) return res.status(500).json({ error: "Falta RESEND_API_KEY en el servidor" });
 
-      // Enviar con Resend
       const { data, error } = await resend.emails.send({
-        from: 'Soporte GSM FIX <onboarding@resend.dev>', // Usar este mientras no verifiques dominio
-        to: process.env.GMAIL_USER || 'gsmfix.ar@gmail.com', // Donde recibes los tickets
+        from: 'Soporte GSM FIX <onboarding@resend.dev>',
+        to: process.env.GMAIL_USER || 'gsmfix.ar@gmail.com',
         subject: `Ticket Soporte: ${userEmail}`,
-        html: `
-          <h3>Nuevo Ticket de Soporte</h3>
-          <p><strong>Usuario:</strong> ${userInfo}</p>
-          <p><strong>Email:</strong> ${userEmail}</p>
-          <hr/>
-          <p><strong>Mensaje:</strong></p>
-          <p style="white-space: pre-wrap; background: #f9f9f9; padding: 15px;">${message}</p>
-          ${imageUrls && imageUrls.length > 0
-            ? `<hr/><p><strong>Adjuntos:</strong></p><ul>${imageUrls.map((url: string) => `<li><a href="${url}">Ver imagen</a></li>`).join('')}</ul>`
-            : ''}
-        `,
+        html: `<h3>Nuevo Ticket</h3><p><strong>Usuario:</strong> ${userInfo}</p><p>${message}</p>`
       });
 
-      if (error) {
-        console.error("Error de Resend:", error);
-        return res.status(400).json({ error });
-      }
-
+      if (error) return res.status(400).json({ error });
       res.json({ success: true, data });
-    } catch (e: any) {
-      console.error("Support Route Error:", e);
-      res.status(500).json({ error: e.message });
-    }
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
   app.get("/api/reports/monthly-detail", async (req, res) => {

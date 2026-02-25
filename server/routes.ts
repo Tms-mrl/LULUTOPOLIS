@@ -369,14 +369,20 @@ export async function registerRoutes(server: Server, app: Express) {
     } catch (e) { res.status(500).json({ error: "Error guardando caja" }); }
   });
 
-  // --- OTRAS RUTAS ---
+ // --- ESTADISTICAS ---
   app.get("/api/stats", async (req, res) => { try { const u = await getUserId(req); res.json(await storage.getStats(u)); } catch (e) { res.status(500).json({ error: "Error" }); } });
 
   app.get("/api/settings", async (req, res) => { try { const u = await getUserId(req); res.json((await storage.getSettings(u)) || {}); } catch (e) { res.status(500).json({ error: "Error" }); } });
   app.post("/api/settings", async (req, res) => { try { const u = await getUserId(req); res.json(await storage.updateSettings(u, req.body)); } catch (e) { res.status(500).json({ error: "Error" }); } });
 
+  // --- RUTAS DE STOCK / PRODUCTOS ---
   app.get("/api/products", async (req, res) => { try { const u = await getUserId(req); res.json(await storage.getProducts(u)); } catch (e) { res.status(500).json({ error: "Error" }); } });
   app.post("/api/products", async (req, res) => { try { const u = await getUserId(req); res.status(201).json(await storage.createProduct({ ...req.body, userId: u, user_id: u } as any)); } catch (e) { res.status(500).json({ error: "Error" }); } });
+  
+  // 👇 AQUÍ ESTÁN LAS RUTAS FALTANTES PARA EDITAR Y BORRAR STOCK 👇
+  app.patch("/api/products/:id", async (req, res) => { try { const u = await storage.updateProduct(req.params.id, req.body); if (!u) return res.status(404).json({ error: "Not found" }); res.json(u); } catch (e) { res.status(500).json({ error: "Error" }); } });
+  app.delete("/api/products/:id", async (req, res) => { try { const u = await getUserId(req); await storage.deleteProduct(req.params.id, u); res.sendStatus(204); } catch (e) { res.status(500).json({ error: "Error deleting product" }); } });
+  // 👆 FIN DE LAS RUTAS AGREGADAS 👆
 
   app.post("/api/upload", upload.single("file"), async (req: any, res: any) => {
     try {

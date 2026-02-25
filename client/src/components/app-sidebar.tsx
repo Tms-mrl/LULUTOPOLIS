@@ -33,17 +33,19 @@ import { useQuery } from "@tanstack/react-query";
 import { type Settings } from "@shared/schema";
 import { cn } from "@/lib/utils";
 
-// --- CAMBIO CLAVE: Dashboard apunta a /dashboard ---
+// --- CAMBIO CLAVE: Reordenado de los elementos ---
 const menuItems = [
   {
     title: "Dashboard",
-    url: "/dashboard", // <--- CORREGIDO
+    url: "/dashboard",
     icon: LayoutDashboard,
     color: "text-pink-500",
     activeBg: "bg-pink-500/10",
     activeText: "text-pink-600 dark:text-pink-400",
     border: "border-pink-500/20"
   },
+  // 👇 AQUÍ MOVIMOS COBROS 👇
+  
   {
     title: "Órdenes",
     url: "/ordenes",
@@ -102,7 +104,7 @@ const menuItems = [
 
 export function AppSidebar() {
   const [location] = useLocation();
-  const [supportDialogOpen, setSupportDialogOpen] = React.useState(false);
+  const [supportDialogOpen, React_useState] = React.useState(false);
 
   const { data: settings } = useQuery<Settings>({
     queryKey: ["/api/settings"],
@@ -142,7 +144,6 @@ export function AppSidebar() {
             <SidebarGroupContent>
               <SidebarMenu className="gap-2">
                 {menuItems.map((item) => {
-                  // --- CAMBIO CLAVE: Lógica de activo mejorada para evitar falsos positivos con "/" ---
                   const isActive = location === item.url || (item.url !== "/" && location.startsWith(item.url));
                   
                   return (
@@ -188,7 +189,7 @@ export function AppSidebar() {
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton 
-                onClick={() => setSupportDialogOpen(true)}
+                onClick={() => React_useState(true)}
                 tooltip="Contactar Soporte"
                 className="h-12 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors rounded-xl group-data-[collapsible=icon]:!justify-center group-data-[collapsible=icon]:!p-0"
               >
@@ -220,7 +221,7 @@ export function AppSidebar() {
 
       <SupportDialog
         open={supportDialogOpen}
-        onOpenChange={setSupportDialogOpen}
+        onOpenChange={React_useState}
       />
     </>
   );

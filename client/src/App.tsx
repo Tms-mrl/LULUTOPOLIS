@@ -31,7 +31,37 @@ import LandingPage from "@/pages/landing/home";
 import Login from "@/pages/auth-login";
 import Register from "@/pages/auth-register";
 import LegalPage from "@/components/marketing/legal";
-import ResetPasswordPage from "@/pages/reset-password"; // 👈 1. IMPORTADO
+import ResetPasswordPage from "@/pages/reset-password";
+
+// 👇 LA MAGIA ESTÁ AQUÍ: EXTRAEMOS LAS RUTAS PRIVADAS A UN COMPONENTE ESTABLE 👇
+// Al estar fuera de la función App(), React no lo destruye al cambiar de pestaña.
+const PrivateRoutes = () => (
+  <Switch>
+    {/* ✅ RUTA 1: PAGO EXITOSO */}
+    <Route path="/payment-success" component={PaymentSuccess} />
+
+    {/* 🔒 RUTA 2: EL RESTO DE LA APP (Candado Activo) */}
+    <Route>
+      <SubscriptionGuard>
+        <Switch>
+          <Route path="/dashboard" component={Dashboard} />
+          <Route path="/ordenes" component={Orders} />
+          <Route path="/ordenes/nueva" component={NewOrder} />
+          <Route path="/ordenes/:id/print" component={PrintOrder} />
+          <Route path="/ordenes/:id" component={OrderDetail} />
+          <Route path="/clientes" component={Clients} />
+          <Route path="/clientes/nuevo" component={NewClient} />
+          <Route path="/clientes/:id" component={ClientDetail} />
+          <Route path="/cobros" component={Payments} />
+          <Route path="/reportes" component={Reports} />
+          <Route path="/inventory" component={InventoryPage} />
+          <Route path="/configuracion" component={SettingsPage} />
+          <Route component={NotFound} />
+        </Switch>
+      </SubscriptionGuard>
+    </Route>
+  </Switch>
+);
 
 function App() {
   const [location] = useLocation();
@@ -42,7 +72,7 @@ function App() {
     location === "/login" ||
     location === "/register" ||
     location === "/legal" ||
-    location === "/reset-password" || // 👈 2. AGREGADO A PÚBLICAS
+    location === "/reset-password" ||
     location.startsWith("/auth");
 
   const sidebarStyle = {
@@ -61,7 +91,7 @@ function App() {
 
             <Route path="/login" component={Login} />
             <Route path="/register" component={Register} />
-            <Route path="/reset-password" component={ResetPasswordPage} /> {/* 👈 3. RUTA NUEVA */}
+            <Route path="/reset-password" component={ResetPasswordPage} />
 
             <Route path="/auth" component={Login} />
             <Route path="/auth/login" component={Login} />
@@ -80,39 +110,8 @@ function App() {
                 </header>
                 <main className="flex-1 overflow-auto p-6">
                   <div className="max-w-7xl mx-auto animate-in fade-in duration-300">
-
-                    <ProtectedRoute
-                      component={() => (
-                        /* USAMOS UN SWITCH AQUÍ PARA SEPARAR EL ÉXITO DEL RESTO */
-                        <Switch>
-
-                          {/* ✅ RUTA 1: PAGO EXITOSO */}
-                          <Route path="/payment-success" component={PaymentSuccess} />
-
-                          {/* 🔒 RUTA 2: EL RESTO DE LA APP (Candado Activo) */}
-                          <Route>
-                            <SubscriptionGuard>
-                              <Switch>
-                                <Route path="/dashboard" component={Dashboard} />
-                                <Route path="/ordenes" component={Orders} />
-                                <Route path="/ordenes/nueva" component={NewOrder} />
-                                <Route path="/ordenes/:id/print" component={PrintOrder} />
-                                <Route path="/ordenes/:id" component={OrderDetail} />
-                                <Route path="/clientes" component={Clients} />
-                                <Route path="/clientes/nuevo" component={NewClient} />
-                                <Route path="/clientes/:id" component={ClientDetail} />
-                                <Route path="/cobros" component={Payments} />
-                                <Route path="/reportes" component={Reports} />
-                                <Route path="/inventory" component={InventoryPage} />
-                                <Route path="/configuracion" component={SettingsPage} />
-                                <Route component={NotFound} />
-                              </Switch>
-                            </SubscriptionGuard>
-                          </Route>
-
-                        </Switch>
-                      )}
-                    />
+                    {/* 👇 LE PASAMOS EL COMPONENTE ESTABLE 👇 */}
+                    <ProtectedRoute component={PrivateRoutes} />
                   </div>
                 </main>
               </div>

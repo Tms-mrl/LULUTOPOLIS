@@ -68,22 +68,26 @@ export const getQueryFn: <T>(options: {
       return await res.json();
     };
 
-// 🔹 CONFIGURACIÓN DE CACHÉ ACTUALIZADA
+// 🔹 CONFIGURACIÓN DE CACHÉ ACTUALIZADA (MAGIA PURA)
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       queryFn: getQueryFn({ on401: "throw" }),
 
-      // 1. Stale Time (Frescura): 1 Hora
-      // Si vuelves a una pantalla antes de 1 hora, NO carga del servidor (instantáneo).
-      staleTime: 1000 * 60 * 60,
+      // 1. Frescura (Stale Time): 0
+      // Muestra la memoria RAM al instante, pero actualiza de fondo silenciosamente.
+      // ¡Adiós a recargar la página a mano!
+      staleTime: 0,
 
-      // 2. GC Time (Memoria): 1 Hora
-      // Mantiene los datos en RAM por 1 hora aunque cambies de pestaña.
-      gcTime: 1000 * 60 * 60,
+      // 2. Memoria Permanente (gcTime / cacheTime): 24 horas
+      // Mantiene los datos en RAM para eliminar la pantalla blanca de 1-2 segundos.
+      gcTime: 1000 * 60 * 60 * 24,
+      //@ts-ignore - Por compatibilidad con v4
+      cacheTime: 1000 * 60 * 60 * 24, 
 
-      // 3. Comportamiento
-      refetchOnWindowFocus: true, // Verifica cambios al volver a la ventana (seguridad)
+      // 3. Comportamiento Inteligente
+      refetchOnWindowFocus: true, 
+      refetchOnMount: true, // Actualiza de fondo al cambiar de pestaña
       retry: false,
     },
     mutations: {

@@ -27,7 +27,7 @@ export function QuickRestockPopover({ product }: QuickRestockPopoverProps) {
             });
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["products"] });
+            queryClient.invalidateQueries({ queryKey: ["/api/products"] }); 
             toast({
                 title: "Stock actualizado",
                 description: `Se agregaron unidades a ${product.name}. Nuevo total: ${product.quantity + Number(amountToAdd)

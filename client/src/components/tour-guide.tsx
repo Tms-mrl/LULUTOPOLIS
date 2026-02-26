@@ -27,7 +27,7 @@ export function TourGuide() {
           {
             popover: {
               title: '¡Bienvenido a tu Nuevo Taller! 🚀', // <-- TÍTULO
-              description: 'Aquí puedes poner tu propio mensaje de bienvenida para explicarle al usuario de qué trata esto.', // <-- DESCRIPCIÓN
+              description: 'Bienvenido al nuevo taller.', // <-- DESCRIPCIÓN
               side: "over",
               align: 'center'
             }
@@ -36,7 +36,7 @@ export function TourGuide() {
             element: 'a[href="/dashboard"]',
             popover: {
               title: '📊 Panel de Control',
-              description: 'Explica aquí para qué sirve el Dashboard a tu manera.',
+              description: 'Tu vista principal. Aquí verás el dinero en caja y el estado de las ordenes de tu negocio en tiempo real.',
               side: "right",
               align: 'start'
             }
@@ -45,7 +45,7 @@ export function TourGuide() {
             element: 'a[href="/ordenes"]',
             popover: {
               title: '📱 Órdenes',
-              description: 'Explica aquí cómo usar las órdenes de reparación.',
+              description: 'Aquí administras los equipos, diagnósticos, señas y tiempos de entrega.',
               side: "right",
               align: 'start'
             }
@@ -54,7 +54,7 @@ export function TourGuide() {
             element: 'a[href="/clientes"]',
             popover: {
               title: '👥 Clientes',
-              description: 'Escribe aquí tu explicación sobre la libreta de clientes.',
+              description: 'Accede rápido al historial de reparaciones de cada cliente y contáctalos por WhatsApp.',
               side: "right",
               align: 'start'
             }
@@ -63,7 +63,7 @@ export function TourGuide() {
             element: 'a[href="/cobros"]',
             popover: {
               title: '💰 Cobros y Caja',
-              description: 'Explica aquí cómo funciona el registro de pagos.',
+              description: 'Tu punto de venta. Registra pagos, gastos diarios e imprime los tickets.',
               side: "right",
               align: 'start'
             }
@@ -82,7 +82,7 @@ export function TourGuide() {
             element: 'a[href="/inventory"]',
             popover: {
               title: '📦 Stock',
-              description: 'Explica cómo llevar el control del inventario de repuestos.',
+              description: 'Tu inventario de repuestos y productos. con alertas e informacion para que estes al tanto de como se encuentra el stock.',
               side: "right",
               align: 'start'
             }
@@ -91,7 +91,7 @@ export function TourGuide() {
             element: 'a[href="/configuracion"]',
             popover: {
               title: '⚙️ Configuración',
-              description: 'Explica que aquí pueden ajustar su logo, legalidades y suscripción.',
+              description: 'Personaliza tu logo, datos de contacto, términos legales y administra tu plan de pago.',
               side: "right",
               align: 'start'
             }
@@ -100,7 +100,7 @@ export function TourGuide() {
             element: '#tour-new-order',
             popover: {
               title: '¡Manos a la obra! 🎉',
-              description: 'Pídele al usuario que presione este botón para probar crear su primera orden.',
+              description: 'Ya conoces lo básico. Haz clic en este botón y anímate a crear tu primera Orden de Reparación de prueba.',
               side: "bottom",
               align: 'end'
             }

@@ -3,11 +3,23 @@ import { driver } from 'driver.js';
 import 'driver.js/dist/driver.css';
 import { useLocation } from 'wouter';
 
-export function TourGuide() {
+// 👇 AQUÍ CREAMOS EL CONTRATO PARA TYPESCRIPT 👇
+interface TourGuideProps {
+  hasOrders?: boolean;
+}
+
+// 👇 SE LO ASIGNAMOS AL COMPONENTE 👇
+export function TourGuide({ hasOrders }: TourGuideProps) {
   const [location] = useLocation();
 
   useEffect(() => {
     if (location !== "/dashboard") return;
+
+    // Si el usuario ya tiene órdenes, marcamos el tour como completado en silencio y lo cancelamos.
+    if (hasOrders) {
+      localStorage.setItem('gsm_tour_completed', 'true');
+      return;
+    }
 
     const hasSeenTour = localStorage.getItem('gsm_tour_completed');
 
@@ -16,10 +28,10 @@ export function TourGuide() {
         showProgress: true,
         animate: true,
         allowClose: true,
-        doneBtnText: '¡Crear Orden! 🛠️', // <-- CAMBIA ESTO
-        nextBtnText: 'Siguiente ➔',    // <-- CAMBIA ESTO
-        prevBtnText: '⬅',              // <-- CAMBIA ESTO
-        popoverClass: 'driverjs-theme', // 👈 ESTO APLICA EL DISEÑO OSCURO QUE PEGAMOS EN EL CSS
+        doneBtnText: '¡Crear Orden! 🛠️',
+        nextBtnText: 'Siguiente ➔',
+        prevBtnText: '⬅',
+        popoverClass: 'driverjs-theme',
         onDestroyed: () => {
           localStorage.setItem('gsm_tour_completed', 'true');
         },
@@ -112,7 +124,7 @@ export function TourGuide() {
         driverObj.drive();
       }, 800);
     }
-  }, [location]);
+  }, [location, hasOrders]);
 
   return null;
 }

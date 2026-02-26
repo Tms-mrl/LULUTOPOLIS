@@ -1,4 +1,4 @@
-import { Switch, Route, useLocation } from "wouter";
+import { Switch, Route, useLocation, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/sonner";
@@ -7,12 +7,10 @@ import { AppSidebar } from "@/components/app-sidebar";
 import NotFound from "@/pages/not-found";
 import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "@/components/protected-route";
-
-// 👇 IMPORTAMOS EL CANDADO Y LA PÁGINA DE ÉXITO
 import { SubscriptionGuard } from "@/components/subscription-guard";
 import PaymentSuccess from "@/pages/payment-success";
 
-// TUS PÁGINAS (App)
+//  PÁGINAS (App)
 import Dashboard from "@/pages/dashboard";
 import Orders from "@/pages/orders";
 import NewOrder from "@/pages/new-order";
@@ -33,12 +31,22 @@ import Register from "@/pages/auth-register";
 import LegalPage from "@/components/marketing/legal";
 import ResetPasswordPage from "@/pages/reset-password";
 
-// 👇 LA MAGIA ESTÁ AQUÍ: EXTRAEMOS LAS RUTAS PRIVADAS A UN COMPONENTE ESTABLE 👇
-// Al estar fuera de la función App(), React no lo destruye al cambiar de pestaña.
+
 const PrivateRoutes = () => (
   <Switch>
-    {/* ✅ RUTA 1: PAGO EXITOSO */}
+    
     <Route path="/payment-success" component={PaymentSuccess} />
+
+    
+    <Route path="/payment-failure">
+      <Redirect to="/configuracion?tab=subscription" />
+    </Route>
+    <Route path="/payment-pending">
+      <Redirect to="/configuracion?tab=subscription" />
+    </Route>
+    <Route path="/plan-expired">
+      <Redirect to="/configuracion?tab=subscription" />
+    </Route>
 
     {/* 🔒 RUTA 2: EL RESTO DE LA APP (Candado Activo) */}
     <Route>
@@ -66,7 +74,7 @@ const PrivateRoutes = () => (
 function App() {
   const [location] = useLocation();
 
-  // Definimos qué rutas son públicas (no requieren Sidebar ni Auth)
+  //  rutas son públicas (no requieren Sidebar ni Auth)
   const isPublicRoute =
     location === "/" ||
     location === "/login" ||
@@ -110,7 +118,6 @@ function App() {
                 </header>
                 <main className="flex-1 overflow-auto p-6">
                   <div className="max-w-7xl mx-auto animate-in fade-in duration-300">
-                    {/* 👇 LE PASAMOS EL COMPONENTE ESTABLE 👇 */}
                     <ProtectedRoute component={PrivateRoutes} />
                   </div>
                 </main>

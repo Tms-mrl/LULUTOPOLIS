@@ -335,6 +335,16 @@ export async function registerRoutes(server: Server, app: Express) {
     } catch (e) { res.status(500).json({ error: "Error interno" }); }
   });
 
+  app.delete("/api/payments/:id", async (req, res) => {
+    try {
+      await storage.deletePayment(req.params.id);
+      res.sendStatus(204);
+    } catch (e) {
+      console.error("Error al borrar pago:", e);
+      res.status(500).json({ error: "Error deleting payment" });
+    }
+  });
+
   // --- RUTAS DE GASTOS ---
   app.get("/api/expenses", async (req, res) => { try { const u = await getUserId(req); res.json(await storage.getExpenses(u)); } catch (e) { res.status(500).json({ error: "Error" }); } });
   
@@ -345,6 +355,16 @@ export async function registerRoutes(server: Server, app: Express) {
       const u = await getUserId(req); 
       res.status(201).json(await storage.createExpense({ ...p.data, userId: u, user_id: u } as any)); 
     } catch (e) { res.status(500).json({ error: "Error" }); } 
+  });
+
+  app.delete("/api/expenses/:id", async (req, res) => {
+    try {
+      await storage.deleteExpense(req.params.id);
+      res.sendStatus(204);
+    } catch (e) {
+      console.error("Error al borrar gasto:", e);
+      res.status(500).json({ error: "Error deleting expense" });
+    }
   });
 
   // --- RUTAS DE CAJA ---

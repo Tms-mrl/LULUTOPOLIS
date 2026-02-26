@@ -608,27 +608,72 @@ export default function OrderDetail() {
                 Fechas
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-4">
+              
+              {/* FECHA DE INGRESO (TEXTO CLIQUEABLE) */}
               <div>
-                <p className="text-sm text-muted-foreground">Fecha de Ingreso</p>
-                <p>{format(new Date(order.createdAt), "d 'de' MMMM, yyyy", { locale: es })}</p>
-              </div>
-              {order.estimatedDate && (
-                <div>
-                  <p className="text-sm text-muted-foreground">Fecha Estimada</p>
-                  <p>{format(new Date(order.estimatedDate), "d 'de' MMMM, yyyy", { locale: es })}</p>
+                <p className="text-sm text-muted-foreground mb-0.5">Fecha de Ingreso</p>
+                <div className="relative inline-flex items-center group">
+                  <p className="font-medium group-hover:text-primary transition-colors">
+                    {currentData.createdAt ? format(new Date(currentData.createdAt), "d 'de' MMMM, yyyy", { locale: es }) : "Sin fecha"}
+                    <Pencil className="w-3 h-3 ml-2 inline opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground" />
+                  </p>
+                  <input
+                    type="date"
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    value={currentData.createdAt ? (() => {
+                      const d = new Date(currentData.createdAt);
+                      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                    })() : ""}
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        const [year, month, day] = e.target.value.split('-').map(Number);
+                        // Usamos as any para que TypeScript no pelee, el backend lo guarda perfecto
+                        setFormData({ ...formData, createdAt: new Date(year, month - 1, day) as any });
+                      }
+                    }}
+                  />
                 </div>
-              )}
+              </div>
+              
+              {/* FECHA ESTIMADA (TEXTO CLIQUEABLE) */}
+              <div>
+                <p className="text-sm text-muted-foreground mb-0.5">Fecha Estimada</p>
+                <div className="relative inline-flex items-center group">
+                  <p className="font-medium group-hover:text-primary transition-colors">
+                    {currentData.estimatedDate ? format(new Date(currentData.estimatedDate), "d 'de' MMMM, yyyy", { locale: es }) : "Agregar fecha..."}
+                    <Pencil className="w-3 h-3 ml-2 inline opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground" />
+                  </p>
+                  <input
+                    type="date"
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    value={currentData.estimatedDate ? (() => {
+                      const d = new Date(currentData.estimatedDate);
+                      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                    })() : ""}
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        const [year, month, day] = e.target.value.split('-').map(Number);
+                        setFormData({ ...formData, estimatedDate: new Date(year, month - 1, day) as any });
+                      } else {
+                        setFormData({ ...formData, estimatedDate: null as any });
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* FECHAS DE FINALIZACIÓN (Solo lectura si ya ocurrieron) */}
               {order.completedAt && (
-                <div>
-                  <p className="text-sm text-muted-foreground">Fecha de Finalización</p>
-                  <p>{format(new Date(order.completedAt), "d 'de' MMMM, yyyy", { locale: es })}</p>
+                <div className="pt-2 border-t border-border/50">
+                  <p className="text-sm text-muted-foreground mb-0.5">Fecha de Finalización</p>
+                  <p className="font-medium">{format(new Date(order.completedAt), "d 'de' MMMM, yyyy", { locale: es })}</p>
                 </div>
               )}
               {order.deliveredAt && (
-                <div>
-                  <p className="text-sm text-muted-foreground">Fecha de Entrega</p>
-                  <p>{format(new Date(order.deliveredAt), "d 'de' MMMM, yyyy", { locale: es })}</p>
+                <div className="pt-2 border-t border-border/50">
+                  <p className="text-sm text-muted-foreground mb-0.5">Fecha de Entrega</p>
+                  <p className="font-medium">{format(new Date(order.deliveredAt), "d 'de' MMMM, yyyy", { locale: es })}</p>
                 </div>
               )}
             </CardContent>

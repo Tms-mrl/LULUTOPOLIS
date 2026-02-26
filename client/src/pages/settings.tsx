@@ -632,25 +632,32 @@ export default function SettingsPage() {
 
                                                     <div className="pt-6">
                                                         <Button
-                                                            className={`relative w-full h-11 font-bold transition-all duration-300 ${isCurrentPlan
-                                                                ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 cursor-default"
-                                                                : plan.comingSoon
-                                                                    ? "bg-neutral-800 text-zinc-500 border border-white/5 cursor-not-allowed"
+                                                            className={`relative w-full h-11 font-bold transition-all duration-300 ${plan.comingSoon
+                                                                ? "bg-neutral-800 text-zinc-500 border border-white/5 cursor-not-allowed"
+                                                                : isCurrentPlan
+                                                                    ? "bg-emerald-600 text-white hover:bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.3)] border-0 active:scale-95"
                                                                     : "bg-gradient-to-r from-violet-600 to-blue-600 text-white hover:shadow-[0_0_20px_rgba(124,58,237,0.4)] border-0 active:scale-95"
-                                                                }`}
-                                                            disabled={isCurrentPlan || plan.comingSoon || loadingCheckout}
+                                                            }`}
+                                                            disabled={plan.comingSoon || loadingCheckout}
                                                             onClick={() => !plan.comingSoon && handleCheckout(plan.id)}
                                                         >
-                                                            {loadingCheckout && !isCurrentPlan && !plan.comingSoon ? (
-                                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                            {loadingCheckout && !plan.comingSoon ? (
+                                                                <div className="flex items-center gap-2">
+                                                                    <Loader2 className="h-4 w-4 animate-spin" /> Procesando...
+                                                                </div>
                                                             ) : isCurrentPlan ? (
-                                                                "Activo"
+                                                                "Extender Suscripción"
                                                             ) : plan.comingSoon ? (
-                                                                "Bloqueado"
+                                                                "Próximamente"
                                                             ) : (
                                                                 "Elegir Plan"
                                                             )}
                                                         </Button>
+                                                        {isCurrentPlan && (
+                                                            <p className="text-[10px] text-emerald-500/70 text-center mt-2 font-medium">
+                                                                Paga ahora y suma tiempo a tu vencimiento actual.
+                                                            </p>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>

@@ -1,3 +1,4 @@
+import { TourGuide } from "@/components/tour-guide";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
@@ -11,7 +12,6 @@ import {
   TrendingUp,
   Inbox,
   LayoutDashboard,
-
   Save
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -149,6 +149,9 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background/50 pb-20 space-y-8">
+      
+      {/* 👇 AQUÍ INSERTAMOS EL TOUR 👇 */}
+      <TourGuide />
 
       {/* --- HEADER --- */}
       <div className="sticky top-0 z-30 border-b border-border/40 bg-background/80 backdrop-blur-md px-6 py-4 transition-all">
@@ -166,6 +169,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-3 w-full sm:w-auto">
             <Button
               asChild
+              id="tour-new-order" // 👈 AQUÍ PONEMOS LA ETIQUETA PARA EL TOUR
               variant="outline"
               className="bg-primary/10 text-primary hover:bg-primary/20 border-primary/20 hover:border-primary/40 shadow-sm backdrop-blur-sm transition-all active:scale-95 flex-1 sm:flex-none"
             >

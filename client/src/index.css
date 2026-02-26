@@ -222,3 +222,62 @@
     inset: -1px;
   }
 }
+
+/* --- TEMA OSCURO PARA EL TOUR (DRIVER.JS) --- */
+.driver-popover.driverjs-theme {
+  background-color: hsl(var(--card)) !important;
+  color: hsl(var(--foreground)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: 1rem !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5) !important;
+  padding: 1.5rem !important;
+}
+
+.driver-popover.driverjs-theme .driver-popover-title {
+  color: hsl(var(--foreground)) !important;
+  font-weight: 700 !important;
+  font-size: 1.125rem !important;
+  margin-bottom: 0.5rem !important;
+}
+
+.driver-popover.driverjs-theme .driver-popover-description {
+  color: hsl(var(--muted-foreground)) !important;
+  font-size: 0.875rem !important;
+  line-height: 1.5 !important;
+}
+
+/* Botones Anterior / Siguiente */
+.driver-popover.driverjs-theme .driver-popover-footer .driver-popover-btn-next,
+.driver-popover.driverjs-theme .driver-popover-footer .driver-popover-btn-prev {
+  background-color: hsl(var(--primary) / 0.1) !important;
+  color: hsl(var(--primary)) !important;
+  border: 1px solid hsl(var(--primary) / 0.2) !important;
+  text-shadow: none !important;
+  border-radius: 0.5rem !important;
+  font-weight: 600 !important;
+  padding: 0.5rem 1rem !important;
+  transition: all 0.2s !important;
+}
+
+.driver-popover.driverjs-theme .driver-popover-footer .driver-popover-btn-next:hover,
+.driver-popover.driverjs-theme .driver-popover-footer .driver-popover-btn-prev:hover {
+  background-color: hsl(var(--primary) / 0.2) !important;
+  border-color: hsl(var(--primary) / 0.4) !important;
+}
+
+/* Botón de cerrar (X) */
+.driver-popover.driverjs-theme .driver-popover-close-btn {
+  color: hsl(var(--muted-foreground)) !important;
+  top: 1rem !important;
+  right: 1rem !important;
+}
+
+.driver-popover.driverjs-theme .driver-popover-close-btn:hover {
+  color: hsl(var(--destructive)) !important;
+}
+
+/* Texto de progreso (1 de 8) */
+.driver-popover.driverjs-theme .driver-popover-progress-text {
+  color: hsl(var(--muted-foreground)) !important;
+  font-size: 0.75rem !important;
+}

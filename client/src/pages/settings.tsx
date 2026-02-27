@@ -227,8 +227,8 @@ export default function SettingsPage() {
                     ? { price: "$25.000", original: "$30.000" } 
                     : { price: "$30.000", original: null };
             }
-            if (billingPeriod === 'semester') return { price: "$160.000", original: "$180.000" };
-            if (billingPeriod === 'annual') return { price: "$300.000", original: "$360.000" };
+            if (billingPeriod === 'semester') return { price: "$30", original: "$180.000" };
+            if (billingPeriod === 'annual') return { price: "$50", original: "$360.000" };
         }
         return { price: "Consultar", original: null };
     };

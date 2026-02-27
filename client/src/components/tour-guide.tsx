@@ -39,7 +39,7 @@ export function TourGuide({ hasOrders }: TourGuideProps) {
           {
             popover: {
               title: '¡Bienvenido a tu Nuevo Taller! 🚀', // <-- TÍTULO
-              description: 'Bienvenido al nuevo taller.', // <-- DESCRIPCIÓN
+              description: 'GSM FIX está listo. Haremos un recorrido de 1 minuto para mostrarte dónde está cada herramienta.', // <-- DESCRIPCIÓN
               side: "over",
               align: 'center'
             }

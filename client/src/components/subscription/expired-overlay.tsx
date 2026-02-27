@@ -12,7 +12,7 @@ export function ExpiredOverlay() {
         {
             id: "monthly",
             title: "Mensual",
-            price: "$30.000",
+            price: "$20",
             period: "por mes",
             features: ["Acceso completo", "Sin permanencia", "Soporte básico"],
             recommended: false
@@ -21,7 +21,7 @@ export function ExpiredOverlay() {
             // OJO: Cambiado de 'semester' a 'semi_annual' para coincidir con el Backend
             id: "semi_annual",
             title: "Semestral",
-            price: "$160.000",
+            price: "$30",
             period: "cada 6 meses",
             features: ["10% OFF", "Soporte prioritario", "Todas las funciones"],
             recommended: true
@@ -29,7 +29,7 @@ export function ExpiredOverlay() {
         {
             id: "annual",
             title: "Anual",
-            price: "$300.000",
+            price: "$40",
             period: "un solo pago anual",
             features: ["20% OFF", "Soporte VIP 24/7", "Auditoría anual"],
             recommended: false

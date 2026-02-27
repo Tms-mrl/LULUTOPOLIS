@@ -137,10 +137,10 @@ export async function registerRoutes(server: Server, app: Express) {
 
       if (planId === 'semi_annual') {
         title = "Suscripción Semestral - GSM FIX";
-        price = 30
+        price = 160000;
       } else if (planId === 'annual') {
         title = "Suscripción Anual - GSM FIX";
-        price = 50
+        price = 300000;
       }
 
       let baseUrl = process.env.CLIENT_URL || process.env.BASE_URL;
